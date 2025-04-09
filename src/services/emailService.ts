@@ -1,5 +1,6 @@
 
 import { EmailPreview, EmailDetail } from "@/types/email";
+import { outlookService } from "./outlookService";
 
 // Mock email data
 const mockEmails: EmailDetail[] = [
@@ -177,8 +178,26 @@ Learning & Development Team`,
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const emailService = {
+  // Check if we should use Outlook or mock data
+  useOutlook: async (): Promise<boolean> => {
+    return outlookService.checkConnection();
+  },
+  
   // Get all emails
   getEmails: async (): Promise<EmailPreview[]> => {
+    // Check if we should use Outlook
+    const useOutlook = await emailService.useOutlook();
+    
+    if (useOutlook) {
+      try {
+        return await outlookService.getEmails();
+      } catch (error) {
+        console.error("Outlook connection error:", error);
+        // Fall back to mock data if Outlook fails
+      }
+    }
+    
+    // Use mock data if not using Outlook or if Outlook fails
     await delay(800);
     return mockEmails.map(email => ({
       id: email.id,
@@ -196,6 +215,20 @@ export const emailService = {
   
   // Get a single email by ID
   getEmailById: async (id: string): Promise<EmailDetail | null> => {
+    // Check if we should use Outlook
+    const useOutlook = await emailService.useOutlook();
+    
+    if (useOutlook) {
+      try {
+        // If ID starts with 'o', it's from Outlook
+        return await outlookService.getEmailById(id);
+      } catch (error) {
+        console.error("Outlook connection error:", error);
+        // Fall back to mock data if Outlook fails
+      }
+    }
+    
+    // Use mock data if not using Outlook or if Outlook fails
     await delay(500);
     const email = mockEmails.find(email => email.id === id);
     
@@ -210,8 +243,21 @@ export const emailService = {
   
   // Send a new email
   sendEmail: async (emailData: any): Promise<boolean> => {
+    // Check if we should use Outlook
+    const useOutlook = await emailService.useOutlook();
+    
+    if (useOutlook) {
+      try {
+        return await outlookService.sendEmail(emailData);
+      } catch (error) {
+        console.error("Outlook connection error:", error);
+        // Fall back to mock implementation if Outlook fails
+      }
+    }
+    
+    // Use mock implementation if not using Outlook or if Outlook fails
     await delay(1000);
-    console.log('Email sent:', emailData);
+    console.log('Email sent (mock):', emailData);
     return true;
   },
   

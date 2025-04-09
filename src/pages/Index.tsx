@@ -5,6 +5,7 @@ import EmailList from "@/components/EmailList";
 import EmailView from "@/components/EmailView";
 import ComposeEmail from "@/components/ComposeEmail";
 import { emailService } from "@/services/emailService";
+import { outlookService } from "@/services/outlookService";
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,6 +15,7 @@ const EmailApp = () => {
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<{
     id: string;
     sender: {
@@ -25,6 +27,19 @@ const EmailApp = () => {
   
   const { toast } = useToast();
 
+  // Check if Outlook is connected
+  useEffect(() => {
+    const connected = outlookService.checkConnection();
+    setIsOutlookConnected(connected);
+    
+    if (connected) {
+      toast({
+        title: "Outlook Connected ✅",
+        description: "Your emails are syncing with Outlook.",
+      });
+    }
+  }, []);
+
   // Fetch emails on component mount
   useEffect(() => {
     const fetchEmails = async () => {
@@ -34,7 +49,7 @@ const EmailApp = () => {
       } catch (error) {
         console.error("Error fetching emails:", error);
         toast({
-          title: "Error",
+          title: "Error ❌",
           description: "Failed to load emails. Please try again.",
           variant: "destructive",
         });
@@ -67,7 +82,7 @@ const EmailApp = () => {
         } catch (error) {
           console.error("Error fetching email details:", error);
           toast({
-            title: "Error",
+            title: "Error ❌",
             description: "Failed to load email details. Please try again.",
             variant: "destructive",
           });
@@ -109,15 +124,18 @@ const EmailApp = () => {
 
   const handleSendEmail = async (emailData: any) => {
     try {
-      await emailService.sendEmail(emailData);
-      toast({
-        title: "Email Sent",
-        description: "Your email has been sent successfully.",
-      });
+      const success = await emailService.sendEmail(emailData);
+      if (success) {
+        toast({
+          title: "Email Sent ✅",
+          description: "Your email has been sent successfully.",
+        });
+        setComposeOpen(false);
+      }
     } catch (error) {
       console.error("Error sending email:", error);
       toast({
-        title: "Send Failed",
+        title: "Send Failed ❌",
         description: "Failed to send email. Please try again.",
         variant: "destructive",
       });

@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, Shield, Bell, Globe, UserCog, Palette, ExternalLink, Check, Save } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import EmailSidebar from "@/components/EmailSidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { outlookService } from "@/services/outlookService";
 
 export default function Settings() {
   const [outlookConnected, setOutlookConnected] = useState(false);
@@ -18,24 +19,101 @@ export default function Settings() {
   const [accountEmail, setAccountEmail] = useState("user@example.com");
   const [timezone, setTimezone] = useState("(UTC-08:00) Pacific Time");
   const [isSaving, setIsSaving] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showEmojis, setShowEmojis] = useState(true);
+  const [compactView, setCompactView] = useState(false);
   const { toast } = useToast();
 
-  const handleConnectOutlook = () => {
+  // Load outlook connection status on component mount
+  useEffect(() => {
+    const connected = outlookService.checkConnection();
+    setOutlookConnected(connected);
+    
+    // If connected, get the email from localStorage
+    if (connected) {
+      const email = localStorage.getItem('outlook_email');
+      if (email) {
+        setAccountEmail(email);
+      }
+    }
+    
+    // Load user preferences from localStorage
+    const savedName = localStorage.getItem('user_name');
+    if (savedName) setAccountName(savedName);
+    
+    const savedTimezone = localStorage.getItem('user_timezone');
+    if (savedTimezone) setTimezone(savedTimezone);
+    
+    const darkMode = localStorage.getItem('dark_mode') === 'true';
+    setIsDarkMode(darkMode);
+    
+    const emojis = localStorage.getItem('show_emojis') !== 'false'; // default true
+    setShowEmojis(emojis);
+    
+    const compact = localStorage.getItem('compact_view') === 'true';
+    setCompactView(compact);
+  }, []);
+
+  const handleConnectOutlook = async () => {
     // In a real app, this would initiate OAuth flow with Microsoft
     setIsSaving(true);
-    setTimeout(() => {
-      setOutlookConnected(true);
-      setAccountEmail("user@outlook.com");
-      setIsSaving(false);
+    try {
+      const success = await outlookService.connect(accountEmail);
+      if (success) {
+        setOutlookConnected(true);
+        toast({
+          title: "✅ Connected to Outlook!",
+          description: "Your Outlook account has been successfully connected.",
+        });
+      } else {
+        toast({
+          title: "❌ Connection failed",
+          description: "Could not connect to Outlook. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
       toast({
-        title: "✅ Connected to Outlook!",
-        description: "Your Outlook account has been successfully connected.",
+        title: "❌ Connection error",
+        description: "An error occurred while connecting to Outlook.",
+        variant: "destructive",
       });
-    }, 1500);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDisconnectOutlook = async () => {
+    setIsSaving(true);
+    try {
+      const success = await outlookService.disconnect();
+      if (success) {
+        setOutlookConnected(false);
+        toast({
+          title: "✅ Disconnected from Outlook",
+          description: "Your Outlook account has been disconnected.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "Could not disconnect from Outlook.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveChanges = () => {
     setIsSaving(true);
+    // Save to localStorage
+    localStorage.setItem('user_name', accountName);
+    localStorage.setItem('user_timezone', timezone);
+    localStorage.setItem('dark_mode', isDarkMode.toString());
+    localStorage.setItem('show_emojis', showEmojis.toString());
+    localStorage.setItem('compact_view', compactView.toString());
+    
     // Simulate saving to the server
     setTimeout(() => {
       setIsSaving(false);
@@ -56,16 +134,16 @@ export default function Settings() {
           <Tabs defaultValue="account">
             <TabsList className="mb-6">
               <TabsTrigger value="account">
-                <UserCog className="h-4 w-4 mr-2" /> Account
+                <UserCog className="h-4 w-4 mr-2" /> Account 👤
               </TabsTrigger>
               <TabsTrigger value="connections">
-                <ExternalLink className="h-4 w-4 mr-2" /> Connections
+                <ExternalLink className="h-4 w-4 mr-2" /> Connections 🔌
               </TabsTrigger>
               <TabsTrigger value="notifications">
-                <Bell className="h-4 w-4 mr-2" /> Notifications
+                <Bell className="h-4 w-4 mr-2" /> Notifications 🔔
               </TabsTrigger>
               <TabsTrigger value="appearance">
-                <Palette className="h-4 w-4 mr-2" /> Appearance
+                <Palette className="h-4 w-4 mr-2" /> Appearance 🎨
               </TabsTrigger>
             </TabsList>
             
@@ -74,7 +152,7 @@ export default function Settings() {
                 <CardHeader>
                   <CardTitle>Account Information 👤</CardTitle>
                   <CardDescription>
-                    Manage your personal information and preferences
+                    Manage your personal information and preferences ✏️
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -121,12 +199,12 @@ export default function Settings() {
                     {isSaving ? (
                       <>
                         <Save className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
+                        Saving... 💾
                       </>
                     ) : (
                       <>
                         <Save className="h-4 w-4 mr-2" />
-                        Save Changes
+                        Save Changes 💾
                       </>
                     )}
                   </Button>
@@ -139,7 +217,7 @@ export default function Settings() {
                 <CardHeader>
                   <CardTitle>Email Connections 🔗</CardTitle>
                   <CardDescription>
-                    Connect to external email services to sync your messages
+                    Connect to external email services to sync your messages 📨
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -151,18 +229,24 @@ export default function Settings() {
                       <div>
                         <h3 className="font-medium">Microsoft Outlook 📧</h3>
                         <p className="text-sm text-email-text-muted">
-                          {outlookConnected ? "Connected" : "Connect to sync your Outlook emails and calendar"}
+                          {outlookConnected ? "Connected ✅" : "Connect to sync your Outlook emails and calendar 📅"}
                         </p>
                       </div>
                     </div>
                     {outlookConnected ? (
-                      <Button variant="outline" className="flex items-center">
-                        <Check className="h-4 w-4 mr-2 text-green-600" />
-                        Connected
+                      <Button variant="outline" className="flex items-center" onClick={handleDisconnectOutlook} disabled={isSaving}>
+                        {isSaving ? (
+                          "Disconnecting..."
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4 mr-2 text-green-600" />
+                            Disconnect
+                          </>
+                        )}
                       </Button>
                     ) : (
                       <Button onClick={handleConnectOutlook} disabled={isSaving}>
-                        {isSaving ? "Connecting..." : "Connect"}
+                        {isSaving ? "Connecting... ⏳" : "Connect 🔗"}
                       </Button>
                     )}
                   </div>
@@ -179,7 +263,7 @@ export default function Settings() {
                         </p>
                       </div>
                     </div>
-                    <Button variant="outline">Connect</Button>
+                    <Button variant="outline">Connect 🔗</Button>
                   </div>
                   
                   <div className="flex items-center justify-between p-4 border rounded-md">
@@ -194,7 +278,7 @@ export default function Settings() {
                         </p>
                       </div>
                     </div>
-                    <Button variant="outline">Connect</Button>
+                    <Button variant="outline">Connect 🔗</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -205,13 +289,13 @@ export default function Settings() {
                 <CardHeader>
                   <CardTitle>Notification Settings 🔔</CardTitle>
                   <CardDescription>
-                    Customize how and when you receive notifications
+                    Customize how and when you receive notifications 📳
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-medium">Email Notifications</h3>
+                      <h3 className="font-medium">Email Notifications 📧</h3>
                       <p className="text-sm text-email-text-muted">
                         Receive notifications for new emails
                       </p>
@@ -221,7 +305,7 @@ export default function Settings() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-medium">Desktop Notifications</h3>
+                      <h3 className="font-medium">Desktop Notifications 🖥️</h3>
                       <p className="text-sm text-email-text-muted">
                         Show notifications on your desktop
                       </p>
@@ -231,7 +315,7 @@ export default function Settings() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-medium">Sound Alerts</h3>
+                      <h3 className="font-medium">Sound Alerts 🔊</h3>
                       <p className="text-sm text-email-text-muted">
                         Play sounds for new messages
                       </p>
@@ -247,7 +331,7 @@ export default function Settings() {
                 <CardHeader>
                   <CardTitle>Appearance Settings 🎨</CardTitle>
                   <CardDescription>
-                    Customize the look and feel of the application
+                    Customize the look and feel of the application ✨
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -258,7 +342,10 @@ export default function Settings() {
                         Switch between light and dark mode
                       </p>
                     </div>
-                    <Switch />
+                    <Switch 
+                      checked={isDarkMode}
+                      onCheckedChange={setIsDarkMode}
+                    />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -268,7 +355,10 @@ export default function Settings() {
                         Display emojis in the interface
                       </p>
                     </div>
-                    <Switch defaultChecked />
+                    <Switch 
+                      checked={showEmojis}
+                      onCheckedChange={setShowEmojis}
+                    />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -278,8 +368,25 @@ export default function Settings() {
                         Show more emails in the inbox view
                       </p>
                     </div>
-                    <Switch />
+                    <Switch 
+                      checked={compactView}
+                      onCheckedChange={setCompactView}
+                    />
                   </div>
+                  <Separator />
+                  <Button onClick={handleSaveChanges} disabled={isSaving}>
+                    {isSaving ? (
+                      <>
+                        <Save className="h-4 w-4 mr-2 animate-spin" />
+                        Saving... 💾
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Appearance Settings 🎨
+                      </>
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
