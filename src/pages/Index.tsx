@@ -4,12 +4,9 @@ import EmailSidebar from "@/components/EmailSidebar";
 import EmailList from "@/components/EmailList";
 import EmailView from "@/components/EmailView";
 import ComposeEmail from "@/components/ComposeEmail";
-import EmailAIChat from "@/components/EmailAIChat";
 import { emailService } from "@/services/emailService";
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
-import { Brain } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
@@ -17,7 +14,6 @@ const EmailApp = () => {
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<{
     id: string;
     sender: {
@@ -128,10 +124,6 @@ const EmailApp = () => {
     }
   };
 
-  const toggleAIChat = () => {
-    setAiChatOpen(!aiChatOpen);
-  };
-
   return (
     <div className="flex h-screen overflow-hidden bg-email-background">
       <EmailSidebar />
@@ -148,10 +140,6 @@ const EmailApp = () => {
           onBack={handleBackToList}
           onReply={handleReply}
         />
-
-        {aiChatOpen && (
-          <EmailAIChat onClose={toggleAIChat} />
-        )}
       </div>
       
       {composeOpen && (
@@ -162,25 +150,17 @@ const EmailApp = () => {
         />
       )}
       
-      {/* Floating action buttons */}
-      <div className="fixed bottom-4 right-4 space-y-2">
-        {!aiChatOpen && (
-          <Button
-            onClick={toggleAIChat}
-            className="rounded-full w-12 h-12 flex items-center justify-center shadow-lg bg-blue-600 hover:bg-blue-700"
-          >
-            <Brain className="h-5 w-5" />
-          </Button>
-        )}
-        <Button
+      {/* Compose button (mobile only) */}
+      <div className="fixed bottom-4 right-4 md:hidden">
+        <button
           onClick={handleComposeNew}
-          className="rounded-full w-12 h-12 flex items-center justify-center shadow-lg"
+          className="bg-email-primary text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 14l-3 -3h-7a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1h9a1 1 0 0 1 1 1v10"></path>
             <path d="M14 15v2a1 1 0 0 1 -1 1h-7l-3 3v-10a1 1 0 0 1 1 -1h2"></path>
           </svg>
-        </Button>
+        </button>
       </div>
     </div>
   );
