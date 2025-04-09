@@ -8,6 +8,7 @@ import { emailService } from "@/services/emailService";
 import { outlookService } from "@/services/outlookService";
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
@@ -26,6 +27,7 @@ const EmailApp = () => {
   } | undefined>(undefined);
   
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Check if Outlook is connected
   useEffect(() => {
@@ -33,9 +35,11 @@ const EmailApp = () => {
     setIsOutlookConnected(connected);
     
     if (connected) {
+      const userEmail = localStorage.getItem('outlook_email');
+      
       toast({
         title: "Outlook Connected ✅",
-        description: "Your emails are syncing with Outlook.",
+        description: `Your emails are syncing with Outlook (${userEmail}).`,
       });
     }
   }, []);
@@ -44,6 +48,7 @@ const EmailApp = () => {
   useEffect(() => {
     const fetchEmails = async () => {
       try {
+        setLoading(true);
         const data = await emailService.getEmails();
         setEmails(data);
       } catch (error) {
@@ -59,6 +64,12 @@ const EmailApp = () => {
     };
 
     fetchEmails();
+    
+    // Set an interval to refresh emails every 30 seconds
+    const refreshInterval = setInterval(fetchEmails, 30000);
+    
+    // Clear interval on component unmount
+    return () => clearInterval(refreshInterval);
   }, []);
 
   // Fetch selected email details
@@ -104,8 +115,7 @@ const EmailApp = () => {
   };
 
   const handleComposeNew = () => {
-    setReplyToEmail(undefined);
-    setComposeOpen(true);
+    navigate('/compose');
   };
 
   const handleReply = (emailId: string) => {
@@ -126,6 +136,15 @@ const EmailApp = () => {
     try {
       const success = await emailService.sendEmail(emailData);
       if (success) {
+        // Save to sent emails in localStorage
+        const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+        sentEmails.push({
+          ...emailData,
+          sentAt: new Date().toISOString(),
+          id: `sent_${Date.now()}`
+        });
+        localStorage.setItem('email_sent', JSON.stringify(sentEmails));
+        
         toast({
           title: "Email Sent ✅",
           description: "Your email has been sent successfully.",
@@ -136,9 +155,19 @@ const EmailApp = () => {
       console.error("Error sending email:", error);
       toast({
         title: "Send Failed ❌",
-        description: "Failed to send email. Please try again.",
+        description: "Failed to send email. Saved as draft instead.",
         variant: "destructive",
       });
+      
+      // Save as draft if sending fails
+      try {
+        await emailService.saveDraft({
+          ...emailData,
+          createdAt: new Date().toISOString()
+        });
+      } catch (draftError) {
+        console.error("Error saving draft:", draftError);
+      }
     }
   };
 
@@ -147,17 +176,31 @@ const EmailApp = () => {
       <EmailSidebar />
       
       <div className="flex flex-1 overflow-hidden">
-        <EmailList 
-          emails={emails}
-          selectedEmail={selectedEmailId}
-          onSelectEmail={handleSelectEmail}
-        />
-        
-        <EmailView 
-          email={selectedEmail}
-          onBack={handleBackToList}
-          onReply={handleReply}
-        />
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full inline-block mb-2"></div>
+              <p>Loading your emails...</p>
+              <p className="text-sm text-gray-500 mt-2">
+                {isOutlookConnected ? "Syncing with Outlook..." : "Loading inbox..."}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <EmailList 
+              emails={emails}
+              selectedEmail={selectedEmailId}
+              onSelectEmail={handleSelectEmail}
+            />
+            
+            <EmailView 
+              email={selectedEmail}
+              onBack={handleBackToList}
+              onReply={handleReply}
+            />
+          </>
+        )}
       </div>
       
       {composeOpen && (

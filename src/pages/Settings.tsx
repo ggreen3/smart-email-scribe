@@ -24,8 +24,9 @@ export default function Settings() {
   const [compactView, setCompactView] = useState(false);
   const { toast } = useToast();
 
-  // Load outlook connection status on component mount
+  // Load outlook connection status and user settings on component mount
   useEffect(() => {
+    // Load Outlook connection
     const connected = outlookService.checkConnection();
     setOutlookConnected(connected);
     
@@ -40,6 +41,9 @@ export default function Settings() {
     // Load user preferences from localStorage
     const savedName = localStorage.getItem('user_name');
     if (savedName) setAccountName(savedName);
+    
+    const savedEmail = localStorage.getItem('user_email');
+    if (savedEmail && !connected) setAccountEmail(savedEmail);
     
     const savedTimezone = localStorage.getItem('user_timezone');
     if (savedTimezone) setTimezone(savedTimezone);
@@ -61,6 +65,10 @@ export default function Settings() {
       const success = await outlookService.connect(accountEmail);
       if (success) {
         setOutlookConnected(true);
+        // Update the email to match the outlook email
+        const outlookEmail = localStorage.getItem('outlook_email');
+        if (outlookEmail) setAccountEmail(outlookEmail);
+        
         toast({
           title: "✅ Connected to Outlook!",
           description: "Your Outlook account has been successfully connected.",
@@ -93,6 +101,10 @@ export default function Settings() {
           title: "✅ Disconnected from Outlook",
           description: "Your Outlook account has been disconnected.",
         });
+        
+        // Reset email to the user_email if available
+        const userEmail = localStorage.getItem('user_email');
+        if (userEmail) setAccountEmail(userEmail);
       }
     } catch (error) {
       toast({
@@ -109,6 +121,12 @@ export default function Settings() {
     setIsSaving(true);
     // Save to localStorage
     localStorage.setItem('user_name', accountName);
+    
+    // Only update email if not connected to Outlook
+    if (!outlookConnected) {
+      localStorage.setItem('user_email', accountEmail);
+    }
+    
     localStorage.setItem('user_timezone', timezone);
     localStorage.setItem('dark_mode', isDarkMode.toString());
     localStorage.setItem('show_emojis', showEmojis.toString());
@@ -121,6 +139,9 @@ export default function Settings() {
         title: "✅ Changes saved!",
         description: "Your account information has been updated successfully.",
       });
+      
+      // Force a page reload to apply the changes immediately
+      window.location.reload();
     }, 1000);
   };
 

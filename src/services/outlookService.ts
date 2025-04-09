@@ -1,4 +1,3 @@
-
 import { EmailPreview, EmailDetail } from "@/types/email";
 
 // This service handles Outlook API interactions
@@ -14,6 +13,7 @@ export const outlookService = {
       // For demo purposes, we'll simulate a successful connection
       localStorage.setItem('outlook_connected', 'true');
       localStorage.setItem('outlook_email', email);
+      localStorage.setItem('user_email', email); // Save for user profile
       
       // Store the connection time to help with debugging
       localStorage.setItem('outlook_connected_time', new Date().toISOString());
@@ -477,5 +477,145 @@ Outlook Service`,
     await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
     
     return true;
+  },
+  
+  // Save draft in Outlook
+  saveDraft: async (emailData: any): Promise<boolean> => {
+    if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
+      throw new Error('Not connected to Outlook');
+    }
+    
+    // In a real implementation, this would call Microsoft Graph API
+    console.log('Saving draft via Outlook:', emailData);
+    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
+    
+    // Also save in localStorage for offline access
+    try {
+      const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+      const newDraft = {
+        id: `odraft_${Date.now()}`,
+        ...emailData,
+        createdAt: new Date().toISOString()
+      };
+      drafts.push(newDraft);
+      localStorage.setItem('email_drafts', JSON.stringify(drafts));
+    } catch (error) {
+      console.error('Error saving Outlook draft to localStorage:', error);
+    }
+    
+    return true;
+  },
+  
+  // Get drafts from Outlook
+  getDrafts: async (): Promise<EmailPreview[]> => {
+    if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
+      throw new Error('Not connected to Outlook');
+    }
+    
+    // In a real implementation, this would call Microsoft Graph API
+    await new Promise(resolve => setTimeout(resolve, 600)); // Simulate API delay
+    
+    // For demo, we'll return drafts from localStorage with Outlook prefixes
+    try {
+      const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+      const outlookEmail = localStorage.getItem('outlook_email');
+      
+      return drafts.filter((draft: any) => draft.id.startsWith('odraft_')).map((draft: any, index: number) => ({
+        id: draft.id || `odraft_${Date.now()}_${index}`,
+        subject: draft.subject || "Draft: No Subject",
+        sender: {
+          name: "You (Outlook)",
+          email: outlookEmail || "outlook@example.com",
+          avatar: "https://i.pravatar.cc/150?img=1",
+        },
+        preview: draft.content?.substring(0, 50) + "..." || "Draft email...",
+        time: new Date(draft.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        date: new Date(draft.createdAt).toLocaleDateString(),
+        read: true,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["Draft", "Outlook"],
+      }));
+    } catch (error) {
+      console.error('Error getting Outlook drafts:', error);
+      return [];
+    }
+  },
+  
+  // Get sent emails from Outlook
+  getSentEmails: async (): Promise<EmailPreview[]> => {
+    if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
+      throw new Error('Not connected to Outlook');
+    }
+    
+    // In a real implementation, this would call Microsoft Graph API
+    await new Promise(resolve => setTimeout(resolve, 600)); // Simulate API delay
+    
+    // For demo, we'll return mock sent emails styled like Outlook
+    const outlookEmail = localStorage.getItem('outlook_email');
+    
+    // Check if there are any sent emails in localStorage
+    try {
+      const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+      if (sentEmails.length > 0) {
+        return sentEmails.map((email: any, index: number) => ({
+          id: email.id || `osent_${Date.now()}_${index}`,
+          subject: email.subject || "(No Subject)",
+          sender: {
+            name: "You (Outlook)",
+            email: outlookEmail || "outlook@example.com",
+            avatar: "https://i.pravatar.cc/150?img=1",
+          },
+          preview: `To: ${email.recipient} - ${email.content?.substring(0, 30)}...` || "Sent email...",
+          time: new Date(email.sentAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          date: new Date(email.sentAt).toLocaleDateString(),
+          read: true,
+          isStarred: false,
+          hasAttachments: false,
+          labels: ["Sent", "Outlook"],
+        }));
+      }
+    } catch (error) {
+      console.error('Error getting sent emails from localStorage:', error);
+    }
+    
+    // Return some mock sent emails if no localStorage data
+    return [
+      {
+        id: "osent_1",
+        subject: "Re: Project Status Update",
+        sender: {
+          name: "You (Outlook)",
+          email: outlookEmail || "outlook@example.com",
+          avatar: "https://i.pravatar.cc/150?img=1",
+        },
+        preview: "To: sarah.johnson@example.com - Here's the latest update on the project as requested...",
+        time: "2:15 PM",
+        date: "Today",
+        read: true,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["Sent", "Outlook", "Work"],
+      },
+      {
+        id: "osent_2",
+        subject: "Meeting Confirmation for Tomorrow",
+        sender: {
+          name: "You (Outlook)",
+          email: outlookEmail || "outlook@example.com",
+          avatar: "https://i.pravatar.cc/150?img=1",
+        },
+        preview: "To: john.smith@example.com - I confirm our meeting tomorrow at 3:00 PM in the main conference room...",
+        time: "Yesterday",
+        date: "Apr 8",
+        read: true,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["Sent", "Outlook", "Meeting"],
+      }
+    ];
   }
 };

@@ -1,4 +1,3 @@
-
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
 
@@ -180,7 +179,9 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const emailService = {
   // Check if we should use Outlook or mock data
   useOutlook: async (): Promise<boolean> => {
-    return outlookService.checkConnection();
+    const connected = outlookService.checkConnection();
+    console.log("Checking Outlook connection:", connected);
+    return connected;
   },
   
   // Get all emails
@@ -318,5 +319,120 @@ export const emailService = {
   getAIAnalysis: async (emailContent: string): Promise<string> => {
     await delay(1500);
     return `This email appears to be about a project update. The sender is providing information about progress and requesting feedback. Consider responding with your thoughts on the current timeline.`;
+  },
+  // Add new functions for draft and sent emails
+  saveDraft: async (emailData: any): Promise<boolean> => {
+    // Check if we should use Outlook
+    const useOutlook = await emailService.useOutlook();
+    
+    if (useOutlook) {
+      try {
+        console.log("Saving draft via Outlook:", emailData);
+        return await outlookService.saveDraft(emailData);
+      } catch (error) {
+        console.error("Outlook error saving draft:", error);
+        // Fall back to localStorage if Outlook fails
+      }
+    }
+    
+    // Use localStorage as fallback
+    await delay(500);
+    try {
+      const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+      const newDraft = {
+        id: `draft_${Date.now()}`,
+        ...emailData,
+        createdAt: new Date().toISOString()
+      };
+      drafts.push(newDraft);
+      localStorage.setItem('email_drafts', JSON.stringify(drafts));
+      console.log('Draft saved to localStorage:', newDraft);
+      return true;
+    } catch (error) {
+      console.error('Error saving draft to localStorage:', error);
+      return false;
+    }
+  },
+  
+  // Get all drafts
+  getDrafts: async (): Promise<EmailPreview[]> => {
+    // Check if we should use Outlook
+    const useOutlook = await emailService.useOutlook();
+    
+    if (useOutlook) {
+      try {
+        console.log("Getting drafts from Outlook...");
+        return await outlookService.getDrafts();
+      } catch (error) {
+        console.error("Outlook error getting drafts:", error);
+        // Fall back to localStorage if Outlook fails
+      }
+    }
+    
+    // Use localStorage as fallback
+    await delay(500);
+    try {
+      const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+      return drafts.map((draft: any) => ({
+        id: draft.id,
+        subject: draft.subject || "(No Subject)",
+        sender: {
+          name: "You",
+          email: localStorage.getItem('user_email') || "user@example.com",
+          avatar: "https://i.pravatar.cc/150?img=1"
+        },
+        preview: draft.content?.substring(0, 50) + "..." || "Draft email...",
+        time: new Date(draft.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        date: new Date(draft.createdAt).toLocaleDateString(),
+        read: true,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["Draft"]
+      }));
+    } catch (error) {
+      console.error('Error getting drafts from localStorage:', error);
+      return [];
+    }
+  },
+  
+  // Get all sent emails
+  getSentEmails: async (): Promise<EmailPreview[]> => {
+    // Check if we should use Outlook
+    const useOutlook = await emailService.useOutlook();
+    
+    if (useOutlook) {
+      try {
+        console.log("Getting sent emails from Outlook...");
+        return await outlookService.getSentEmails();
+      } catch (error) {
+        console.error("Outlook error getting sent emails:", error);
+        // Fall back to localStorage if Outlook fails
+      }
+    }
+    
+    // Use localStorage as fallback
+    await delay(500);
+    try {
+      const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+      return sentEmails.map((email: any) => ({
+        id: email.id,
+        subject: email.subject || "(No Subject)",
+        sender: {
+          name: "You",
+          email: localStorage.getItem('user_email') || "user@example.com",
+          avatar: "https://i.pravatar.cc/150?img=1"
+        },
+        preview: `To: ${email.recipient} - ${email.content?.substring(0, 30)}...` || "Sent email...",
+        time: new Date(email.sentAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        date: new Date(email.sentAt).toLocaleDateString(),
+        read: true,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["Sent"]
+      }));
+    } catch (error) {
+      console.error('Error getting sent emails from localStorage:', error);
+      return [];
+    }
   },
 };
