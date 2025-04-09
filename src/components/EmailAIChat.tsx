@@ -117,7 +117,7 @@ export default function EmailAIChat({ onClose }: EmailAIChatProps) {
     navigator.clipboard.writeText(text);
     toast({
       title: "Copied to clipboard",
-      description: "The text has been copied to your clipboard.",
+      description: "The text has been copied to your clipboard."
     });
   };
 
