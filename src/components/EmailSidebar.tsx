@@ -1,35 +1,40 @@
 
-import { Mail, Send, File, Archive, Trash2, Settings, Star, Users, AlertCircle } from "lucide-react";
+import { Mail, Send, File, Archive, Trash2, Settings, Star, Users, AlertCircle, BarChart4, Clock, Building } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 type SidebarItem = {
   name: string;
   icon: React.ElementType;
   count?: number;
   isActive?: boolean;
+  path: string;
 };
 
 const folders: SidebarItem[] = [
-  { name: "Inbox", icon: Mail, count: 12, isActive: true },
-  { name: "Sent", icon: Send, count: 0 },
-  { name: "Drafts", icon: File, count: 3 },
-  { name: "Archive", icon: Archive, count: 0 },
-  { name: "Spam", icon: AlertCircle, count: 0 },
-  { name: "Trash", icon: Trash2, count: 0 },
+  { name: "Inbox", icon: Mail, count: 12, isActive: true, path: "/" },
+  { name: "Sent", icon: Send, count: 0, path: "/sent" },
+  { name: "Drafts", icon: File, count: 3, path: "/drafts" },
+  { name: "Archive", icon: Archive, count: 0, path: "/archive" },
+  { name: "Spam", icon: AlertCircle, count: 0, path: "/spam" },
+  { name: "Trash", icon: Trash2, count: 0, path: "/trash" },
 ];
 
 const categories: SidebarItem[] = [
-  { name: "Important", icon: Star, count: 4 },
-  { name: "People", icon: Users, count: 8 },
-  { name: "Settings", icon: Settings },
+  { name: "Important", icon: Star, count: 4, path: "/important" },
+  { name: "People", icon: Users, count: 8, path: "/people" },
+  { name: "Clients", icon: Building, path: "/clients" },
+  { name: "Chasers", icon: Clock, path: "/chasers" },
+  { name: "Financials", icon: BarChart4, path: "/financials" },
+  { name: "Settings", icon: Settings, path: "/settings" },
 ];
 
 export default function EmailSidebar() {
   return (
     <div className="w-64 h-screen bg-email-sidepanel border-r border-email-border flex flex-col">
       <div className="p-4">
-        <Button variant="default" className="w-full">
+        <Button variant="default" className="w-full" component={Link} to="/compose">
           <Mail className="mr-2 h-4 w-4" />
           Compose
         </Button>
@@ -42,9 +47,9 @@ export default function EmailSidebar() {
           </h2>
           <div className="space-y-1">
             {folders.map((folder) => (
-              <a
+              <Link
                 key={folder.name}
-                href="#"
+                to={folder.path}
                 className={cn(
                   "flex items-center justify-between px-4 py-2 text-sm rounded-md",
                   folder.isActive
@@ -64,7 +69,7 @@ export default function EmailSidebar() {
                     {folder.count}
                   </span>
                 )}
-              </a>
+              </Link>
             ))}
           </div>
         </div>
@@ -75,9 +80,9 @@ export default function EmailSidebar() {
           </h2>
           <div className="space-y-1">
             {categories.map((category) => (
-              <a
+              <Link
                 key={category.name}
-                href="#"
+                to={category.path}
                 className="flex items-center justify-between px-4 py-2 text-sm rounded-md text-email-text-primary hover:bg-email-hover hover:text-email-primary"
               >
                 <div className="flex items-center">
@@ -89,7 +94,7 @@ export default function EmailSidebar() {
                     {category.count}
                   </span>
                 )}
-              </a>
+              </Link>
             ))}
           </div>
         </div>
