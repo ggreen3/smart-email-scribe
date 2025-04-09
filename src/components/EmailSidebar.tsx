@@ -34,9 +34,12 @@ export default function EmailSidebar() {
   return (
     <div className="w-64 h-screen bg-email-sidepanel border-r border-email-border flex flex-col">
       <div className="p-4">
-        <Button variant="default" className="w-full" component={Link} to="/compose">
-          <Mail className="mr-2 h-4 w-4" />
-          Compose
+        {/* Fixed the Button usage - replace the component prop with asChild and wrap with Link */}
+        <Button variant="default" className="w-full" asChild>
+          <Link to="/compose">
+            <Mail className="mr-2 h-4 w-4" />
+            Compose
+          </Link>
         </Button>
       </div>
       

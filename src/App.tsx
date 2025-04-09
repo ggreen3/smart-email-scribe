@@ -22,36 +22,42 @@ import People from "./pages/People";
 import Settings from "./pages/Settings";
 import Compose from "./pages/Compose";
 
-const queryClient = new QueryClient();
+// Move this inside the component function
+// const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/sent" element={<Sent />} />
-          <Route path="/drafts" element={<Drafts />} />
-          <Route path="/archive" element={<Archive />} />
-          <Route path="/spam" element={<Spam />} />
-          <Route path="/trash" element={<Trash />} />
-          <Route path="/important" element={<Important />} />
-          <Route path="/people" element={<People />} />
-          <Route path="/clients" element={<ClientsList />} />
-          <Route path="/clients/:clientId" element={<ClientEmails />} />
-          <Route path="/chasers" element={<ChaserEmails />} />
-          <Route path="/financials" element={<Financials />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/compose" element={<Compose />} />
-          <Route path="/summaries" element={<EmailSummaries />} />
-          <Route path="/ai-chat" element={<EmailAIChat />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  // Create a new QueryClient instance inside the component
+  const queryClient = new QueryClient();
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/sent" element={<Sent />} />
+            <Route path="/drafts" element={<Drafts />} />
+            <Route path="/archive" element={<Archive />} />
+            <Route path="/spam" element={<Spam />} />
+            <Route path="/trash" element={<Trash />} />
+            <Route path="/important" element={<Important />} />
+            <Route path="/people" element={<People />} />
+            <Route path="/clients" element={<ClientsList />} />
+            <Route path="/clients/:clientId" element={<ClientEmails />} />
+            <Route path="/chasers" element={<ChaserEmails />} />
+            <Route path="/financials" element={<Financials />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/compose" element={<Compose />} />
+            <Route path="/summaries" element={<EmailSummaries />} />
+            <Route path="/ai-chat" element={<EmailAIChat />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
