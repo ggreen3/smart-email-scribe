@@ -9,12 +9,15 @@ import { outlookService } from "@/services/outlookService";
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<{
@@ -46,31 +49,70 @@ const EmailApp = () => {
 
   // Fetch emails on component mount
   useEffect(() => {
-    const fetchEmails = async () => {
-      try {
-        setLoading(true);
-        const data = await emailService.getEmails();
-        setEmails(data);
-      } catch (error) {
-        console.error("Error fetching emails:", error);
-        toast({
-          title: "Error ❌",
-          description: "Failed to load emails. Please try again.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchEmails();
     
-    // Set an interval to refresh emails every 30 seconds
-    const refreshInterval = setInterval(fetchEmails, 30000);
+    // Set an interval to refresh emails every 60 seconds
+    const refreshInterval = setInterval(fetchEmails, 60000);
     
     // Clear interval on component unmount
     return () => clearInterval(refreshInterval);
   }, []);
+
+  const fetchEmails = async () => {
+    try {
+      setLoading(true);
+      toast({
+        title: "Syncing Emails",
+        description: "Retrieving your emails...",
+      });
+      
+      const data = await emailService.getEmails();
+      setEmails(data);
+      
+      toast({
+        title: "Emails Synced",
+        description: `Retrieved ${data.length} emails.`,
+      });
+    } catch (error) {
+      console.error("Error fetching emails:", error);
+      toast({
+        title: "Error ❌",
+        description: "Failed to load emails. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    
+    setRefreshing(true);
+    try {
+      toast({
+        title: "Refreshing Emails",
+        description: "Fetching your latest emails...",
+      });
+      
+      const data = await emailService.getEmails();
+      setEmails(data);
+      
+      toast({
+        title: "Emails Refreshed",
+        description: `Retrieved ${data.length} emails.`,
+      });
+    } catch (error) {
+      console.error("Error refreshing emails:", error);
+      toast({
+        title: "Refresh Failed",
+        description: "Failed to refresh emails. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Fetch selected email details
   useEffect(() => {
@@ -120,36 +162,40 @@ const EmailApp = () => {
 
   const handleReply = (emailId: string) => {
     if (selectedEmail) {
-      setReplyToEmail({
-        id: selectedEmail.id,
-        sender: {
-          name: selectedEmail.sender.name,
-          email: selectedEmail.sender.email,
-        },
-        subject: selectedEmail.subject,
+      navigate('/compose', {
+        state: {
+          replyTo: {
+            id: selectedEmail.id,
+            subject: selectedEmail.subject,
+            sender: {
+              name: selectedEmail.sender.name,
+              email: selectedEmail.sender.email,
+            },
+            date: selectedEmail.date,
+            body: selectedEmail.body || ""
+          }
+        }
       });
-      setComposeOpen(true);
     }
   };
 
   const handleSendEmail = async (emailData: any) => {
     try {
+      toast({
+        title: "Sending Email",
+        description: "Your email is being sent...",
+      });
+      
       const success = await emailService.sendEmail(emailData);
+      
       if (success) {
-        // Save to sent emails in localStorage
-        const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
-        sentEmails.push({
-          ...emailData,
-          sentAt: new Date().toISOString(),
-          id: `sent_${Date.now()}`
-        });
-        localStorage.setItem('email_sent', JSON.stringify(sentEmails));
-        
         toast({
           title: "Email Sent ✅",
           description: "Your email has been sent successfully.",
         });
         setComposeOpen(false);
+      } else {
+        throw new Error("Failed to send email");
       }
     } catch (error) {
       console.error("Error sending email:", error);
@@ -176,31 +222,33 @@ const EmailApp = () => {
       <EmailSidebar />
       
       <div className="flex flex-1 overflow-hidden">
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full inline-block mb-2"></div>
-              <p>Loading your emails...</p>
-              <p className="text-sm text-gray-500 mt-2">
-                {isOutlookConnected ? "Syncing with Outlook..." : "Loading inbox..."}
-              </p>
-            </div>
+        <div className="flex flex-col w-80">
+          <div className="p-2 flex justify-end border-b border-email-border">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="gap-1"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
           </div>
-        ) : (
-          <>
-            <EmailList 
-              emails={emails}
-              selectedEmail={selectedEmailId}
-              onSelectEmail={handleSelectEmail}
-            />
-            
-            <EmailView 
-              email={selectedEmail}
-              onBack={handleBackToList}
-              onReply={handleReply}
-            />
-          </>
-        )}
+          
+          <EmailList 
+            emails={emails}
+            selectedEmail={selectedEmailId}
+            onSelectEmail={handleSelectEmail}
+            loading={loading}
+          />
+        </div>
+        
+        <EmailView 
+          email={selectedEmail}
+          onBack={handleBackToList}
+          onReply={handleReply}
+        />
       </div>
       
       {composeOpen && (

@@ -1,21 +1,52 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import EmailSidebar from "@/components/EmailSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { emailService } from "@/services/emailService";
+import { Loader2 } from "lucide-react";
 
 export default function Compose() {
   const [subject, setSubject] = useState("");
   const [recipient, setRecipient] = useState("");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isDraft, setIsDraft] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Check if we're editing a draft
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.draft) {
+      setSubject(state.draft.subject || "");
+      setRecipient(state.draft.recipient || "");
+      setContent(state.draft.content || "");
+      setIsDraft(true);
+      setDraftId(state.draft.id || null);
+      
+      toast({
+        title: "Draft Loaded",
+        description: "You're editing a saved draft.",
+      });
+    } else if (state?.replyTo) {
+      // Handle reply to email
+      setSubject(state.replyTo.subject.startsWith("Re:") ? state.replyTo.subject : `Re: ${state.replyTo.subject}`);
+      setRecipient(state.replyTo.sender.email);
+      setContent(`\n\n\n-------- Original Message --------\nFrom: ${state.replyTo.sender.name} <${state.replyTo.sender.email}>\nDate: ${state.replyTo.date}\nSubject: ${state.replyTo.subject}\n\n${state.replyTo.body || ""}`);
+      
+      toast({
+        title: "Reply Started",
+        description: `Replying to ${state.replyTo.sender.name}.`,
+      });
+    }
+  }, [location]);
   
   const handleSend = async () => {
     if (!recipient || !subject || !content) {
@@ -28,6 +59,7 @@ export default function Compose() {
     }
     
     setLoading(true);
+    
     try {
       // Create email data
       const emailData = {
@@ -35,22 +67,28 @@ export default function Compose() {
         recipient,
         content,
         sentAt: new Date().toISOString(),
-        id: `sent_${Date.now()}`
+        id: isDraft && draftId ? draftId : `sent_${Date.now()}`
       };
       
       // Send the email
       const success = await emailService.sendEmail(emailData);
       
       if (success) {
-        // Save to sent emails in localStorage
-        const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
-        sentEmails.push(emailData);
-        localStorage.setItem('email_sent', JSON.stringify(sentEmails));
-        
         toast({
           title: "Email sent",
           description: `Your email to ${recipient} has been sent.`,
         });
+        
+        // If this was a draft, remove it from drafts
+        if (isDraft && draftId) {
+          try {
+            const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+            const updatedDrafts = drafts.filter((draft: any) => draft.id !== draftId);
+            localStorage.setItem('email_drafts', JSON.stringify(updatedDrafts));
+          } catch (error) {
+            console.error("Error removing sent draft:", error);
+          }
+        }
         
         navigate("/sent");
       } else {
@@ -85,6 +123,7 @@ export default function Compose() {
     try {
       // Create draft data
       const draftData = {
+        id: isDraft && draftId ? draftId : undefined,
         subject,
         recipient,
         content,
@@ -117,7 +156,12 @@ export default function Compose() {
   
   const handleDiscard = () => {
     if (subject || recipient || content) {
-      handleSaveAsDraft();
+      const confirmDiscard = window.confirm("Do you want to save this email as a draft before discarding?");
+      if (confirmDiscard) {
+        handleSaveAsDraft();
+      } else {
+        navigate("/");
+      }
     } else {
       navigate("/");
     }
@@ -129,7 +173,7 @@ export default function Compose() {
       <div className="flex-1 p-6">
         <Card>
           <CardHeader>
-            <CardTitle>Compose New Email</CardTitle>
+            <CardTitle>{isDraft ? "Edit Draft" : "Compose New Email"}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -163,13 +207,27 @@ export default function Compose() {
               </div>
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={handleDiscard} disabled={loading}>
-                  {(subject || recipient || content) ? "Save as Draft" : "Discard"}
+                  Discard
                 </Button>
                 <Button variant="secondary" onClick={handleSaveAsDraft} disabled={loading}>
-                  {loading ? "Saving..." : "Save Draft"}
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Draft"
+                  )}
                 </Button>
                 <Button onClick={handleSend} disabled={loading}>
-                  {loading ? "Sending..." : "Send Email"}
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Email"
+                  )}
                 </Button>
               </div>
             </div>

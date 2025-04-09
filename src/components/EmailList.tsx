@@ -1,6 +1,6 @@
 
-import { useState } from "react";
-import { Search, Filter, Star, Paperclip, Calendar, User, Tag, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Filter, Star, Paperclip, Calendar, User, Tag, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -8,60 +8,66 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { EmailPreview } from "@/types/email";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 
 interface EmailListProps {
   emails: EmailPreview[];
   selectedEmail: string | null;
   onSelectEmail: (id: string) => void;
+  loading?: boolean;
 }
 
 type FilterType = "all" | "unread" | "flagged" | "attachments" | "recent";
 type SortType = "date" | "sender" | "subject";
 type SortDirection = "asc" | "desc";
 
-export default function EmailList({ emails, selectedEmail, onSelectEmail }: EmailListProps) {
+export default function EmailList({ emails, selectedEmail, onSelectEmail, loading = false }: EmailListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortType>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [showAISummary, setShowAISummary] = useState(true);
+  const [filteredEmails, setFilteredEmails] = useState<EmailPreview[]>([]);
+  const { toast } = useToast();
 
-  // Apply filters
-  const applyFilters = (emails: EmailPreview[]) => {
-    let filteredEmails = emails;
+  // Apply filters when emails, searchQuery, or activeFilter changes
+  useEffect(() => {
+    let result = emails;
     
     // Text search
-    filteredEmails = filteredEmails.filter(email => 
-      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      email.sender.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.preview.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    if (searchQuery) {
+      result = result.filter(email => 
+        email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        email.sender.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        email.preview.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
     
     // Category filters
     switch (activeFilter) {
       case "unread":
-        filteredEmails = filteredEmails.filter(email => !email.read);
+        result = result.filter(email => !email.read);
         break;
       case "flagged":
-        filteredEmails = filteredEmails.filter(email => email.isStarred);
+        result = result.filter(email => email.isStarred);
         break;
       case "attachments":
-        filteredEmails = filteredEmails.filter(email => email.hasAttachments);
+        result = result.filter(email => email.hasAttachments);
         break;
       case "recent":
         // Assuming we'd have a dateReceived property in a real app
-        // For now, we'll just filter randomly to simulate
-        filteredEmails = filteredEmails.filter((_, index) => index % 2 === 0);
+        // For now, we'll just filter to most recent based on time
+        const today = new Date().toLocaleDateString();
+        result = result.filter(email => email.date === "Today" || email.date === today);
         break;
       default:
         break;
     }
     
     // Apply sorting
-    filteredEmails.sort((a, b) => {
+    result.sort((a, b) => {
       if (sortBy === "sender") {
         return sortDirection === "asc" 
           ? a.sender.name.localeCompare(b.sender.name)
@@ -78,10 +84,16 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
       }
     });
     
-    return filteredEmails;
-  };
-
-  const filteredEmails = applyFilters(emails);
+    // Notify about filter results if there was an active search or filter
+    if ((searchQuery || activeFilter !== "all") && result.length !== emails.length) {
+      toast({
+        title: "Filter Applied",
+        description: `Found ${result.length} matching emails.`,
+      });
+    }
+    
+    setFilteredEmails(result);
+  }, [emails, searchQuery, activeFilter, sortBy, sortDirection]);
   
   const toggleSort = (type: SortType) => {
     if (sortBy === type) {
@@ -90,11 +102,39 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
       setSortBy(type);
       setSortDirection("desc");
     }
+    
+    toast({
+      title: "Sorted Emails",
+      description: `Sorted by ${type} in ${sortDirection === "asc" ? "descending" : "ascending"} order.`,
+    });
   };
 
   const toggleFilter = () => {
     setShowFilters(!showFilters);
   };
+
+  // Get counts for AI summary
+  const getEmailCounts = () => {
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    
+    const recentEmails = emails.filter(email => {
+      // For this demo, we'll just check for "Today" emails
+      return email.date === "Today";
+    });
+    
+    const unreadEmails = emails.filter(email => !email.read);
+    const starredEmails = emails.filter(email => email.isStarred);
+    
+    return {
+      recent: recentEmails.length,
+      unread: unreadEmails.length,
+      priority: starredEmails.length,
+      awaiting: Math.min(5, Math.floor(unreadEmails.length / 2)) // Just for demo purposes
+    };
+  };
+
+  const counts = getEmailCounts();
 
   return (
     <div className="w-80 h-screen border-r border-email-border flex flex-col bg-white">
@@ -130,21 +170,25 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
                   <Clock className="h-3 w-3 mr-1 text-blue-500" />
                   <span className="text-xs font-medium">Last 4 hours</span>
                 </div>
-                <span className="text-xs text-muted-foreground">April 9, 2025</span>
+                <span className="text-xs text-muted-foreground">{new Date().toLocaleDateString()}</span>
               </div>
               
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs">New emails</span>
-                  <span className="text-xs font-medium">12 📥</span>
+                  <span className="text-xs font-medium">{counts.recent} 📥</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs">Unread</span>
+                  <span className="text-xs font-medium">{counts.unread} 📩</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs">Priority</span>
-                  <span className="text-xs font-medium">3 ⚠️</span>
+                  <span className="text-xs font-medium">{counts.priority} ⚠️</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs">Awaiting response</span>
-                  <span className="text-xs font-medium">5 ⏱️</span>
+                  <span className="text-xs font-medium">{counts.awaiting} ⏱️</span>
                 </div>
               </div>
               
@@ -250,7 +294,14 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
       </div>
       
       <div className="flex-1 overflow-y-auto">
-        {filteredEmails.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-2" />
+              <p>Loading emails...</p>
+            </div>
+          </div>
+        ) : filteredEmails.length === 0 ? (
           <div className="p-4 text-center text-email-text-secondary">
             No matching emails found. 🤷‍♂️
           </div>

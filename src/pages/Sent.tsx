@@ -1,65 +1,21 @@
 
 import { useState, useEffect } from "react";
-import { Send, Paperclip, Star, Archive, Trash2 } from "lucide-react";
+import { Send, Paperclip, Star, Archive, Trash2, Loader2 } from "lucide-react";
 import EmailSidebar from "@/components/EmailSidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { emailService } from "@/services/emailService";
 import { outlookService } from "@/services/outlookService";
 import { useToast } from "@/hooks/use-toast";
-
-// Sample sent emails
-const sentEmails = [
-  {
-    id: "sent1",
-    subject: "Re: Project Timeline Update 📅",
-    recipient: {
-      name: "David Liu",
-      email: "david.liu@contoso.com",
-      avatar: "https://i.pravatar.cc/150?img=51",
-    },
-    preview: "Thanks for the update, David. I've reviewed the timeline and everything looks good to proceed...",
-    time: "11:32 AM",
-    date: "Today",
-    hasAttachments: false,
-    isStarred: false,
-  },
-  {
-    id: "sent2",
-    subject: "Quarterly Report Draft 📊",
-    recipient: {
-      name: "Finance Team",
-      email: "finance@contoso.com",
-      avatar: "https://i.pravatar.cc/150?img=61",
-    },
-    preview: "Please find attached the draft of our quarterly report for your review. I've highlighted the key metrics...",
-    time: "Yesterday",
-    date: "Apr 8",
-    hasAttachments: true,
-    isStarred: true,
-  },
-  {
-    id: "sent3",
-    subject: "Meeting Confirmation: Product Discussion 📝",
-    recipient: {
-      name: "Product Team",
-      email: "product@contoso.com",
-      avatar: "https://i.pravatar.cc/150?img=12",
-    },
-    preview: "This is to confirm our meeting tomorrow at 2 PM in Conference Room A. I'll be presenting the latest...",
-    time: "Apr 6",
-    date: "Apr 6",
-    hasAttachments: false,
-    isStarred: false,
-  },
-];
+import { EmailPreview } from "@/types/email";
 
 export default function Sent() {
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
-  const [emails, setEmails] = useState(sentEmails);
+  const [emails, setEmails] = useState<EmailPreview[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -67,8 +23,35 @@ export default function Sent() {
     const connected = outlookService.checkConnection();
     setIsOutlookConnected(connected);
     
-    // In a real implementation, we would fetch sent emails from Outlook
-    // For demo purposes, we're using the mock data
+    // Fetch sent emails
+    const fetchSentEmails = async () => {
+      try {
+        setLoading(true);
+        toast({
+          title: "Loading Sent Emails",
+          description: "Retrieving your sent emails...",
+        });
+        
+        const data = await emailService.getSentEmails();
+        setEmails(data);
+        
+        toast({
+          title: "Emails Loaded",
+          description: `Retrieved ${data.length} sent emails.`,
+        });
+      } catch (error) {
+        console.error("Error fetching sent emails:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load sent emails. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchSentEmails();
   }, []);
 
   const handleArchive = (id: string) => {
@@ -108,15 +91,22 @@ export default function Sent() {
             )}
           </div>
           
-          {emails.length > 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-2" />
+                <p>Loading sent emails...</p>
+              </div>
+            </div>
+          ) : emails.length > 0 ? (
             <div className="space-y-4">
               {emails.map((email) => (
                 <Card key={email.id} className="hover:shadow-sm transition-shadow">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
                       <Avatar className="h-10 w-10 mt-1">
-                        <AvatarImage src={email.recipient.avatar} alt={email.recipient.name} />
-                        <AvatarFallback>{email.recipient.name.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={email.sender.avatar} alt={email.sender.name} />
+                        <AvatarFallback>{email.sender.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                       
                       <div className="flex-1 min-w-0">
@@ -128,11 +118,8 @@ export default function Sent() {
                         </div>
                         
                         <p className="text-sm text-email-text-secondary mb-2">
-                          To: <span className="font-medium">{email.recipient.name}</span> 
-                          <span className="text-email-text-muted ml-1">&lt;{email.recipient.email}&gt;</span>
+                          {email.preview.includes("To:") ? email.preview : `To: ${email.preview}`}
                         </p>
-                        
-                        <p className="text-sm text-email-text-muted line-clamp-2">{email.preview}</p>
                         
                         <div className="flex items-center justify-between mt-3">
                           <div className="flex items-center space-x-1">

@@ -1,5 +1,6 @@
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock email data
 const mockEmails: EmailDetail[] = [
@@ -191,12 +192,36 @@ export const emailService = {
     
     if (useOutlook) {
       try {
+        // Show notification that emails are being retrieved
+        
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Syncing with Outlook",
+          description: "Retrieving your emails from Outlook...",
+        });
+        
         console.log("Getting emails from Outlook...");
         const outlookEmails = await outlookService.getEmails();
         console.log("Received emails from Outlook:", outlookEmails.length);
+        
+        // Show notification that emails have been retrieved
+        toast({
+          title: "Sync Complete",
+          description: `Retrieved ${outlookEmails.length} emails from Outlook.`,
+        });
+        
         return outlookEmails;
       } catch (error) {
         console.error("Outlook connection error:", error);
+        
+        // Show error notification
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Sync Failed",
+          description: "Failed to retrieve emails from Outlook. Using cached data instead.",
+          variant: "destructive",
+        });
+        
         // Fall back to mock data if Outlook fails
       }
     }
@@ -255,11 +280,52 @@ export const emailService = {
     
     if (useOutlook) {
       try {
+        // Show notification that email is being sent
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Sending Email",
+          description: "Your email is being sent via Outlook...",
+        });
+        
         console.log("Sending email via Outlook:", emailData);
-        return await outlookService.sendEmail(emailData);
+        const success = await outlookService.sendEmail(emailData);
+        
+        if (success) {
+          // Show success notification
+          toast({
+            title: "Email Sent",
+            description: `Your email to ${emailData.recipient} has been sent.`,
+          });
+          
+          // Save to sent emails in localStorage for offline access
+          try {
+            const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+            sentEmails.push({
+              ...emailData,
+              sentAt: new Date().toISOString(),
+              id: `sent_${Date.now()}`
+            });
+            localStorage.setItem('email_sent', JSON.stringify(sentEmails));
+          } catch (error) {
+            console.error('Error saving sent email to localStorage:', error);
+          }
+        }
+        
+        return success;
       } catch (error) {
-        console.error("Outlook connection error:", error);
-        // Fall back to mock implementation if Outlook fails
+        console.error("Outlook error sending email:", error);
+        
+        // Show error notification
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Send Failed",
+          description: "Failed to send email via Outlook. Saved as draft instead.",
+          variant: "destructive",
+        });
+        
+        // Save as draft if Outlook fails
+        await emailService.saveDraft(emailData);
+        return false;
       }
     }
     
@@ -315,22 +381,43 @@ export const emailService = {
     return false;
   },
   
-  // Get AI analysis for an email
-  getAIAnalysis: async (emailContent: string): Promise<string> => {
-    await delay(1500);
-    return `This email appears to be about a project update. The sender is providing information about progress and requesting feedback. Consider responding with your thoughts on the current timeline.`;
-  },
-  // Add new functions for draft and sent emails
+  // Save draft in local storage and/or Outlook
   saveDraft: async (emailData: any): Promise<boolean> => {
     // Check if we should use Outlook
     const useOutlook = await emailService.useOutlook();
     
     if (useOutlook) {
       try {
+        // Show notification that draft is being saved
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Saving Draft",
+          description: "Your draft is being saved to Outlook...",
+        });
+        
         console.log("Saving draft via Outlook:", emailData);
-        return await outlookService.saveDraft(emailData);
+        const success = await outlookService.saveDraft(emailData);
+        
+        if (success) {
+          // Show success notification
+          toast({
+            title: "Draft Saved",
+            description: "Your draft has been saved to Outlook.",
+          });
+        }
+        
+        return success;
       } catch (error) {
         console.error("Outlook error saving draft:", error);
+        
+        // Show error notification
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Error Saving Draft",
+          description: "Failed to save draft to Outlook. Saved locally instead.",
+          variant: "destructive",
+        });
+        
         // Fall back to localStorage if Outlook fails
       }
     }
@@ -347,6 +434,14 @@ export const emailService = {
       drafts.push(newDraft);
       localStorage.setItem('email_drafts', JSON.stringify(drafts));
       console.log('Draft saved to localStorage:', newDraft);
+      
+      // Show success notification
+      const { toast } = await import("@/hooks/use-toast");
+      toast({
+        title: "Draft Saved",
+        description: "Your draft has been saved locally.",
+      });
+      
       return true;
     } catch (error) {
       console.error('Error saving draft to localStorage:', error);
@@ -434,5 +529,11 @@ export const emailService = {
       console.error('Error getting sent emails from localStorage:', error);
       return [];
     }
+  },
+  
+  // Get AI analysis for an email
+  getAIAnalysis: async (emailContent: string): Promise<string> => {
+    await delay(1500);
+    return `This email appears to be about a project update. The sender is providing information about progress and requesting feedback. Consider responding with your thoughts on the current timeline.`;
   },
 };
