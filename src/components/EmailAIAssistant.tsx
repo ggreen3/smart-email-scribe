@@ -42,26 +42,26 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
         {
           id: '1',
           type: 'analysis',
-          title: 'Email Summary',
+          title: 'Email Summary ✨',
           content: `This email is about ${email.subject.toLowerCase()}. The sender is requesting information about your availability for a meeting next week. The email has ${email.attachments?.length || 0} attachments.`
         },
         {
           id: '2',
           type: 'suggestion',
-          title: 'Suggested Actions',
+          title: 'Suggested Actions 📋',
           content: 'Check your calendar for availability next week\nReview the attached documents before responding\nPrepare questions for the meeting topic'
         },
         {
           id: '3',
           type: 'response',
-          title: 'Suggested Response',
+          title: 'Suggested Response 📝',
           content: `Hi ${email.sender.name.split(' ')[0]},\n\nThank you for your email. I've reviewed your request and am available for a meeting next week. I have some availability on Tuesday and Thursday afternoon.\n\nI've looked through the attached documents and have a few questions I'd like to discuss during our meeting.\n\nLet me know which day works best for you, and I'll schedule it in my calendar.\n\nBest regards,\n[Your Name]`
         }
       ]);
     } catch (error) {
       console.error('Error analyzing email:', error);
       toast({
-        title: "Error",
+        title: "Error ❌",
         description: "Failed to analyze the email. Please try again.",
         variant: "destructive",
       });
@@ -84,13 +84,13 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       setResponses(prev => [...prev, {
         id: Date.now().toString(),
         type: 'response',
-        title: 'Response to your question',
+        title: 'Response to your question 🤖',
         content: `Based on your question: "${userQuery}"\n\nThe email indicates that ${email.sender.name} is looking for a response by the end of this week. I would recommend prioritizing this as it appears to be time-sensitive.\n\nWould you like me to draft a follow-up email for you?`
       }]);
     } catch (error) {
       console.error('Error processing query:', error);
       toast({
-        title: "Error",
+        title: "Error ❌",
         description: "Failed to process your question. Please try again.",
         variant: "destructive",
       });
@@ -102,7 +102,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
-      title: "Copied to clipboard",
+      title: "Copied to clipboard ✅",
       description: "The text has been copied to your clipboard.",
     });
   };
@@ -112,7 +112,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       <div className="p-4 border-b border-email-border flex items-center justify-between">
         <h2 className="font-medium flex items-center">
           <Brain className="h-4 w-4 mr-2" />
-          AI Email Assistant
+          AI Email Assistant 🤖
         </h2>
         <Button variant="ghost" size="sm" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -123,7 +123,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
         {loading && responses.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-email-text-muted">
             <Loader2 className="h-8 w-8 animate-spin mb-3" />
-            <p>Analyzing email content...</p>
+            <p>Analyzing email content... 🔍</p>
           </div>
         ) : (
           responses.map((response) => (
@@ -156,7 +156,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
         {loading && responses.length > 0 && (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            <span className="text-sm text-email-text-secondary">Processing...</span>
+            <span className="text-sm text-email-text-secondary">Processing... ⚙️</span>
           </div>
         )}
       </div>
@@ -164,20 +164,26 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       <div className="p-4 border-t border-email-border">
         <div className="relative">
           <Textarea
-            placeholder="Ask the AI assistant a question..."
-            className="min-h-24 pr-10"
+            placeholder="Ask the AI assistant a question... ✨"
+            className="min-h-24 pr-16"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={loading}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendQuery();
+              }
+            }}
           />
           <Button
             size="sm"
-            variant="ghost"
             className="absolute bottom-3 right-3"
             onClick={handleSendQuery}
             disabled={loading || !query.trim()}
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-4 w-4 mr-2" />
+            Send
           </Button>
         </div>
         
@@ -188,7 +194,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
             className="h-auto p-0 text-xs text-email-primary"
             onClick={() => setQuery("Draft a response to this email")}
           >
-            Draft a response to this email
+            Draft a response to this email ✍️
           </Button>
           <Separator className="my-1" />
           <Button 
@@ -196,7 +202,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
             className="h-auto p-0 text-xs text-email-primary"
             onClick={() => setQuery("Summarize the key points")}
           >
-            Summarize the key points
+            Summarize the key points 📋
           </Button>
         </div>
       </div>

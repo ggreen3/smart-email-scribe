@@ -1,5 +1,5 @@
 
-import { Mail, Send, File, Archive, Trash2, Settings, Star, Users, AlertCircle, BarChart4, Clock, Building } from "lucide-react";
+import { Mail, Send, File, Archive, Trash2, Settings, Star, Users, AlertCircle, BarChart4, Clock, Building, Calendar, Tag, Folder, Search, BookOpen, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -28,10 +28,17 @@ const categories: SidebarItem[] = [
   { name: "Clients", icon: Building, emoji: "🏢", path: "/clients" },
   { name: "Chasers", icon: Clock, emoji: "⏱️", path: "/chasers" },
   { name: "Financials", icon: BarChart4, emoji: "💰", path: "/financials" },
+  { name: "Calendar", icon: Calendar, emoji: "📅", path: "/calendar" },
+  { name: "Newsletters", icon: BookOpen, emoji: "📚", path: "/newsletters" },
+  { name: "Insights", icon: Search, emoji: "🔍", path: "/summaries" },
+  { name: "AI Chat", icon: MessageSquare, emoji: "🤖", path: "/ai-chat" },
   { name: "Settings", icon: Settings, emoji: "⚙️", path: "/settings" },
 ];
 
 export default function EmailSidebar() {
+  // Check the current path to highlight the active link
+  const currentPath = window.location.pathname;
+  
   return (
     <div className="w-64 h-screen bg-email-sidepanel border-r border-email-border flex flex-col">
       <div className="p-4">
@@ -55,7 +62,7 @@ export default function EmailSidebar() {
                 to={folder.path}
                 className={cn(
                   "flex items-center justify-between px-4 py-2 text-sm rounded-md",
-                  folder.isActive
+                  currentPath === folder.path
                     ? "bg-email-hover text-email-primary font-medium"
                     : "text-email-text-primary hover:bg-email-hover hover:text-email-primary"
                 )}
@@ -67,7 +74,7 @@ export default function EmailSidebar() {
                 {typeof folder.count === "number" && (
                   <span className={cn(
                     "px-2 py-1 text-xs font-medium rounded-full",
-                    folder.isActive ? "bg-email-primary text-white" : "bg-gray-100 text-email-text-secondary"
+                    currentPath === folder.path ? "bg-email-primary text-white" : "bg-gray-100 text-email-text-secondary"
                   )}>
                     {folder.count}
                   </span>
@@ -86,14 +93,22 @@ export default function EmailSidebar() {
               <Link
                 key={category.name}
                 to={category.path}
-                className="flex items-center justify-between px-4 py-2 text-sm rounded-md text-email-text-primary hover:bg-email-hover hover:text-email-primary"
+                className={cn(
+                  "flex items-center justify-between px-4 py-2 text-sm rounded-md", 
+                  currentPath === category.path
+                    ? "bg-email-hover text-email-primary font-medium"
+                    : "text-email-text-primary hover:bg-email-hover hover:text-email-primary"
+                )}
               >
                 <div className="flex items-center">
                   <category.icon className="mr-2 h-4 w-4" />
                   <span>{category.name} {category.emoji}</span>
                 </div>
                 {typeof category.count === "number" && (
-                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-email-text-secondary">
+                  <span className={cn(
+                    "px-2 py-1 text-xs font-medium rounded-full",
+                    currentPath === category.path ? "bg-email-primary text-white" : "bg-gray-100 text-email-text-secondary"
+                  )}>
                     {category.count}
                   </span>
                 )}

@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Mail, Shield, Bell, Globe, UserCog, Palette, ExternalLink, Check } from "lucide-react";
+import { Mail, Shield, Bell, Globe, UserCog, Palette, ExternalLink, Check, Save } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,20 +10,40 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import EmailSidebar from "@/components/EmailSidebar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Settings() {
   const [outlookConnected, setOutlookConnected] = useState(false);
+  const [accountName, setAccountName] = useState("User");
+  const [accountEmail, setAccountEmail] = useState("user@example.com");
+  const [timezone, setTimezone] = useState("(UTC-08:00) Pacific Time");
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
   const handleConnectOutlook = () => {
     // In a real app, this would initiate OAuth flow with Microsoft
+    setIsSaving(true);
     setTimeout(() => {
       setOutlookConnected(true);
+      setAccountEmail("user@outlook.com");
+      setIsSaving(false);
       toast({
         title: "✅ Connected to Outlook!",
         description: "Your Outlook account has been successfully connected.",
       });
     }, 1500);
+  };
+
+  const handleSaveChanges = () => {
+    setIsSaving(true);
+    // Simulate saving to the server
+    setTimeout(() => {
+      setIsSaving(false);
+      toast({
+        title: "✅ Changes saved!",
+        description: "Your account information has been updated successfully.",
+      });
+    }, 1000);
   };
 
   return (
@@ -60,18 +80,56 @@ export default function Settings() {
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="display-name">Display Name</Label>
-                    <Input id="display-name" defaultValue="User" />
+                    <Input 
+                      id="display-name" 
+                      value={accountName}
+                      onChange={(e) => setAccountName(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" defaultValue="user@example.com" readOnly />
+                    <Input 
+                      id="email" 
+                      value={accountEmail}
+                      onChange={(e) => setAccountEmail(e.target.value)}
+                      disabled={outlookConnected}
+                    />
+                    {outlookConnected && (
+                      <p className="text-xs text-email-text-muted mt-1">
+                        ℹ️ Email is managed by your Outlook account
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="timezone">Timezone</Label>
-                    <Input id="timezone" defaultValue="(UTC-08:00) Pacific Time" />
+                    <Select value={timezone} onValueChange={setTimezone}>
+                      <SelectTrigger id="timezone">
+                        <SelectValue placeholder="Select timezone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="(UTC-08:00) Pacific Time">🌎 (UTC-08:00) Pacific Time</SelectItem>
+                        <SelectItem value="(UTC-05:00) Eastern Time">🌎 (UTC-05:00) Eastern Time</SelectItem>
+                        <SelectItem value="(UTC+00:00) GMT">🌍 (UTC+00:00) GMT</SelectItem>
+                        <SelectItem value="(UTC+01:00) Central European Time">🌍 (UTC+01:00) Central European Time</SelectItem>
+                        <SelectItem value="(UTC+08:00) China Standard Time">🌏 (UTC+08:00) China Standard Time</SelectItem>
+                        <SelectItem value="(UTC+09:00) Japan Standard Time">🌏 (UTC+09:00) Japan Standard Time</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <Separator />
-                  <Button>Save Changes</Button>
+                  <Button onClick={handleSaveChanges} disabled={isSaving}>
+                    {isSaving ? (
+                      <>
+                        <Save className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -103,7 +161,9 @@ export default function Settings() {
                         Connected
                       </Button>
                     ) : (
-                      <Button onClick={handleConnectOutlook}>Connect</Button>
+                      <Button onClick={handleConnectOutlook} disabled={isSaving}>
+                        {isSaving ? "Connecting..." : "Connect"}
+                      </Button>
                     )}
                   </div>
                   
@@ -116,6 +176,21 @@ export default function Settings() {
                         <h3 className="font-medium">Gmail 📨</h3>
                         <p className="text-sm text-email-text-muted">
                           Connect to sync your Gmail account
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="outline">Connect</Button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded-md">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 bg-yellow-100 rounded-md flex items-center justify-center mr-4">
+                        <Mail className="h-6 w-6 text-yellow-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">Yahoo Mail 📫</h3>
+                        <p className="text-sm text-email-text-muted">
+                          Connect to sync your Yahoo Mail account
                         </p>
                       </div>
                     </div>

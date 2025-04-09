@@ -1,11 +1,15 @@
 
 import { useState } from "react";
-import { Search, Filter, Star, Paperclip } from "lucide-react";
+import { Search, Filter, Star, Paperclip, Calendar, User, Tag, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import { EmailPreview } from "@/types/email";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface EmailListProps {
   emails: EmailPreview[];
@@ -13,13 +17,84 @@ interface EmailListProps {
   onSelectEmail: (id: string) => void;
 }
 
+type FilterType = "all" | "unread" | "flagged" | "attachments" | "recent";
+type SortType = "date" | "sender" | "subject";
+type SortDirection = "asc" | "desc";
+
 export default function EmailList({ emails, selectedEmail, onSelectEmail }: EmailListProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<SortType>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [showAISummary, setShowAISummary] = useState(true);
 
-  const filteredEmails = emails.filter(email => 
-    email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    email.sender.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Apply filters
+  const applyFilters = (emails: EmailPreview[]) => {
+    let filteredEmails = emails;
+    
+    // Text search
+    filteredEmails = filteredEmails.filter(email => 
+      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      email.sender.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.preview.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    // Category filters
+    switch (activeFilter) {
+      case "unread":
+        filteredEmails = filteredEmails.filter(email => !email.read);
+        break;
+      case "flagged":
+        filteredEmails = filteredEmails.filter(email => email.isStarred);
+        break;
+      case "attachments":
+        filteredEmails = filteredEmails.filter(email => email.hasAttachments);
+        break;
+      case "recent":
+        // Assuming we'd have a dateReceived property in a real app
+        // For now, we'll just filter randomly to simulate
+        filteredEmails = filteredEmails.filter((_, index) => index % 2 === 0);
+        break;
+      default:
+        break;
+    }
+    
+    // Apply sorting
+    filteredEmails.sort((a, b) => {
+      if (sortBy === "sender") {
+        return sortDirection === "asc" 
+          ? a.sender.name.localeCompare(b.sender.name)
+          : b.sender.name.localeCompare(a.sender.name);
+      } else if (sortBy === "subject") {
+        return sortDirection === "asc"
+          ? a.subject.localeCompare(b.subject)
+          : b.subject.localeCompare(a.subject);
+      } else {
+        // Sort by date (using the time string as a proxy)
+        return sortDirection === "asc"
+          ? a.time.localeCompare(b.time)
+          : b.time.localeCompare(a.time);
+      }
+    });
+    
+    return filteredEmails;
+  };
+
+  const filteredEmails = applyFilters(emails);
+  
+  const toggleSort = (type: SortType) => {
+    if (sortBy === type) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(type);
+      setSortDirection("desc");
+    }
+  };
+
+  const toggleFilter = () => {
+    setShowFilters(!showFilters);
+  };
 
   return (
     <div className="w-80 h-screen border-r border-email-border flex flex-col bg-white">
@@ -28,7 +103,7 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-email-text-muted" />
           <Input 
             type="text"
-            placeholder="Search emails"
+            placeholder="Search emails 🔍"
             className="pl-8 bg-gray-50"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -36,19 +111,148 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
         </div>
       </div>
       
-      <div className="p-2 border-b border-email-border flex justify-between items-center">
-        <span className="text-sm text-email-text-secondary">
-          {filteredEmails.length} messages
-        </span>
-        <button className="p-1.5 rounded-md hover:bg-email-hover">
-          <Filter className="h-4 w-4 text-email-text-secondary" />
-        </button>
+      {showAISummary && (
+        <div className="p-3 border-b border-email-border bg-blue-50">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-semibold flex items-center">
+              <BarChart className="h-3 w-3 mr-1" />
+              AI Summary 📊
+            </h3>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setShowAISummary(false)}>
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <Card className="bg-white border shadow-sm">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center">
+                  <Clock className="h-3 w-3 mr-1 text-blue-500" />
+                  <span className="text-xs font-medium">Last 4 hours</span>
+                </div>
+                <span className="text-xs text-muted-foreground">April 9, 2025</span>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs">New emails</span>
+                  <span className="text-xs font-medium">12 📥</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs">Priority</span>
+                  <span className="text-xs font-medium">3 ⚠️</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs">Awaiting response</span>
+                  <span className="text-xs font-medium">5 ⏱️</span>
+                </div>
+              </div>
+              
+              <Button variant="link" size="sm" className="text-xs p-0 h-auto mt-2">
+                View detailed report 📑
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      <div className="p-2 border-b border-email-border">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm text-email-text-secondary">
+            {filteredEmails.length} messages 📬
+          </span>
+          <div className="flex">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="p-1 h-8">
+                  <ArrowDownUp className="h-4 w-4 text-email-text-secondary" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => toggleSort("date")}>
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Sort by Date {sortBy === "date" && (sortDirection === "asc" ? "↑" : "↓")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => toggleSort("sender")}>
+                  <User className="h-4 w-4 mr-2" />
+                  Sort by Sender {sortBy === "sender" && (sortDirection === "asc" ? "↑" : "↓")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => toggleSort("subject")}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Sort by Subject {sortBy === "subject" && (sortDirection === "asc" ? "↑" : "↓")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
+            <Button variant="ghost" size="sm" className="p-1 h-8 ml-1" onClick={toggleFilter}>
+              <Filter className="h-4 w-4 text-email-text-secondary" />
+            </Button>
+          </div>
+        </div>
+        
+        {showFilters && (
+          <div className="p-2 bg-gray-50 rounded-md mt-1 grid grid-cols-2 gap-1">
+            <Button 
+              variant={activeFilter === "all" ? "default" : "outline"} 
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setActiveFilter("all")}
+            >
+              All 📧
+            </Button>
+            <Button 
+              variant={activeFilter === "unread" ? "default" : "outline"} 
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setActiveFilter("unread")}
+            >
+              Unread 📩
+            </Button>
+            <Button 
+              variant={activeFilter === "flagged" ? "default" : "outline"} 
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setActiveFilter("flagged")}
+            >
+              Flagged ⭐
+            </Button>
+            <Button 
+              variant={activeFilter === "attachments" ? "default" : "outline"} 
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setActiveFilter("attachments")}
+            >
+              Attachments 📎
+            </Button>
+            <Button 
+              variant={activeFilter === "recent" ? "default" : "outline"} 
+              size="sm"
+              className="text-xs h-7 col-span-2"
+              onClick={() => setActiveFilter("recent")}
+            >
+              Recent 🕒
+            </Button>
+            <div className="col-span-2 flex justify-end">
+              <Button 
+                variant="link" 
+                size="sm" 
+                className="text-xs p-0 mt-1"
+                onClick={() => { 
+                  setActiveFilter("all");
+                  setSearchQuery("");
+                }}
+              >
+                Clear filters 🧹
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
       
       <div className="flex-1 overflow-y-auto">
         {filteredEmails.length === 0 ? (
           <div className="p-4 text-center text-email-text-secondary">
-            No matching emails found.
+            No matching emails found. 🤷‍♂️
           </div>
         ) : (
           filteredEmails.map((email) => (
@@ -56,8 +260,8 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail }: Emai
               key={email.id}
               onClick={() => onSelectEmail(email.id)}
               className={cn(
-                "email-list-item p-3 border-b border-email-border",
-                selectedEmail === email.id && "selected"
+                "email-list-item p-3 border-b border-email-border hover:bg-gray-50 cursor-pointer",
+                selectedEmail === email.id && "bg-blue-50 hover:bg-blue-50"
               )}
             >
               <div className="flex items-start mb-2">
