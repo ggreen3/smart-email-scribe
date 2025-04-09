@@ -25,7 +25,7 @@ type SearchResult = {
 export default function EmailAIChat() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<AIMessage[]>([
-    { id: '1', role: 'assistant', content: 'Hello! I\'m your email assistant. You can ask me to find emails, summarize conversations, or help draft responses. How can I help you today?' }
+    { id: '1', role: 'assistant', content: 'Hello! I\'m your email assistant. You can ask me to find emails, summarize conversations, or help draft responses. How can I help you today? 😊' }
   ]);
   const [input, setInput] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -58,7 +58,7 @@ export default function EmailAIChat() {
     } catch (error) {
       console.error('Error processing message:', error);
       toast({
-        title: "Error",
+        title: "Error ❌",
         description: "Failed to process your request. Please try again.",
         variant: "destructive",
       });
@@ -85,7 +85,7 @@ export default function EmailAIChat() {
     setMessages(prev => [...prev, {
       id: Date.now().toString(),
       role: 'assistant',
-      content: `I found ${mockResults.length} emails matching your search. Here are the results:`
+      content: `I found ${mockResults.length} emails matching your search. Here are the results: 📧`
     }]);
   };
 
@@ -96,11 +96,11 @@ export default function EmailAIChat() {
     let response = '';
     
     if (userQuery.toLowerCase().includes('summarize')) {
-      response = 'Based on your emails from the last 24 hours, you have 3 unread messages from clients, 2 pending action items, and an upcoming meeting tomorrow at 2:00 PM. Would you like me to generate a more detailed summary?';
+      response = 'Based on your emails from the last 24 hours, you have 3 unread messages from clients, 2 pending action items, and an upcoming meeting tomorrow at 2:00 PM. Would you like me to generate a more detailed summary? 📋';
     } else if (userQuery.toLowerCase().includes('draft') || userQuery.toLowerCase().includes('write')) {
-      response = 'Here\'s a draft response:\n\nDear [Name],\n\nThank you for your email. I have reviewed the information you provided and would be happy to discuss this further. I\'m available for a call this Thursday or Friday afternoon if that works for your schedule.\n\nBest regards,\n[Your Name]';
+      response = 'Here\'s a draft response:\n\nDear [Name],\n\nThank you for your email. I have reviewed the information you provided and would be happy to discuss this further. I\'m available for a call this Thursday or Friday afternoon if that works for your schedule.\n\nBest regards,\n[Your Name] ✍️';
     } else {
-      response = 'I understand you\'re asking about "' + userQuery + '". Is there a specific email or set of emails you would like me to analyze? I can help you find, summarize, or draft responses to emails.';
+      response = 'I understand you\'re asking about "' + userQuery + '". Is there a specific email or set of emails you would like me to analyze? I can help you find, summarize, or draft responses to emails. 🤔';
     }
     
     setMessages(prev => [...prev, {
@@ -113,7 +113,7 @@ export default function EmailAIChat() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
-      title: "Copied to clipboard",
+      title: "Copied to clipboard ✅",
       description: "The text has been copied to your clipboard."
     });
   };
@@ -130,7 +130,7 @@ export default function EmailAIChat() {
         <div className="p-4 border-b border-email-border flex items-center justify-between">
           <h2 className="font-medium flex items-center">
             <Brain className="h-4 w-4 mr-2" />
-            AI Email Assistant
+            AI Email Assistant 🤖
           </h2>
           <Button variant="ghost" size="sm">
             <X className="h-4 w-4" />
@@ -141,7 +141,7 @@ export default function EmailAIChat() {
           {showSearch ? (
             <div className="flex-1 flex flex-col">
               <div className="p-4 flex items-center justify-between">
-                <h3 className="text-sm font-medium">Search Results</h3>
+                <h3 className="text-sm font-medium">Search Results 🔍</h3>
                 <Button variant="ghost" size="sm" onClick={closeSearch}>
                   <Undo className="h-4 w-4" />
                 </Button>
@@ -178,7 +178,7 @@ export default function EmailAIChat() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-medium text-sm">
-                        {message.role === 'user' ? 'You' : 'AI Assistant'}
+                        {message.role === 'user' ? 'You 👤' : 'AI Assistant 🤖'}
                       </h3>
                       {message.role === 'assistant' && (
                         <Button 
@@ -199,7 +199,7 @@ export default function EmailAIChat() {
                 {loading && (
                   <div className="flex items-center justify-center py-4">
                     <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    <span className="text-sm text-email-text-secondary">Thinking...</span>
+                    <span className="text-sm text-email-text-secondary">Thinking... 🧠</span>
                   </div>
                 )}
               </div>
@@ -207,8 +207,8 @@ export default function EmailAIChat() {
               <div className="p-4 border-t border-email-border">
                 <div className="relative">
                   <Textarea
-                    placeholder="Ask the AI assistant anything about your emails..."
-                    className="min-h-24 pr-10"
+                    placeholder="Ask the AI assistant anything about your emails... ✨"
+                    className="min-h-24 pr-16"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     disabled={loading}
@@ -220,13 +220,11 @@ export default function EmailAIChat() {
                     }}
                   />
                   <Button
-                    size="sm"
-                    variant="ghost"
                     className="absolute bottom-3 right-3"
-                    onClick={handleSend}
                     disabled={loading || !input.trim()}
+                    onClick={handleSend}
                   >
-                    <Send className="h-4 w-4" />
+                    <Send className="h-4 w-4 mr-2" /> Send
                   </Button>
                 </div>
                 
@@ -237,7 +235,7 @@ export default function EmailAIChat() {
                     className="h-auto p-0 text-xs text-email-primary"
                     onClick={() => setInput("Find emails from Acme Corp about the Q1 report")}
                   >
-                    Find emails from Acme Corp about the Q1 report
+                    Find emails from Acme Corp about the Q1 report 🔍
                   </Button>
                   <Separator className="my-1" />
                   <Button 
@@ -245,7 +243,7 @@ export default function EmailAIChat() {
                     className="h-auto p-0 text-xs text-email-primary"
                     onClick={() => setInput("Summarize my emails from today")}
                   >
-                    Summarize my emails from today
+                    Summarize my emails from today 📋
                   </Button>
                   <Separator className="my-1" />
                   <Button 
@@ -253,7 +251,7 @@ export default function EmailAIChat() {
                     className="h-auto p-0 text-xs text-email-primary"
                     onClick={() => setInput("Draft a follow-up email to John about the project")}
                   >
-                    Draft a follow-up email to John about the project
+                    Draft a follow-up email to John about the project ✍️
                   </Button>
                 </div>
               </div>
