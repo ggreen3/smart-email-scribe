@@ -101,7 +101,7 @@ export default function EmailAIChat({ onClose }: EmailAIChatProps) {
     if (userQuery.toLowerCase().includes('summarize')) {
       response = 'Based on your emails from the last 24 hours, you have 3 unread messages from clients, 2 pending action items, and an upcoming meeting tomorrow at 2:00 PM. Would you like me to generate a more detailed summary?';
     } else if (userQuery.toLowerCase().includes('draft') || userQuery.toLowerCase().includes('write')) {
-      response = 'Here\'s a draft response:\n\nDear [Name],\n\nThank you for your email. I've reviewed the information you provided and would be happy to discuss this further. I'm available for a call this Thursday or Friday afternoon if that works for your schedule.\n\nBest regards,\n[Your Name]';
+      response = 'Here\'s a draft response:\n\nDear [Name],\n\nThank you for your email. I have reviewed the information you provided and would be happy to discuss this further. I am available for a call this Thursday or Friday afternoon if that works for your schedule.\n\nBest regards,\n[Your Name]';
     } else {
       response = 'I understand you\'re asking about "' + userQuery + '". Is there a specific email or set of emails you would like me to analyze? I can help you find, summarize, or draft responses to emails.';
     }

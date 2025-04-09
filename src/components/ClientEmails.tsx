@@ -72,7 +72,7 @@ const mockClients: Record<string, Client> = {
           email: 'john.doe@acmecorp.com',
           avatar: undefined
         },
-        preview: 'Thank you for sending over the project proposal. I've reviewed it with our team and we have a few questions.',
+        preview: 'Thank you for sending over the project proposal. I have reviewed it with our team and we have a few questions.',
         time: '2:30 PM',
         date: '2025-04-05',
         read: true,
@@ -218,7 +218,7 @@ const mockClients: Record<string, Client> = {
           name: 'Michael Johnson',
           email: 'michael@initech.com'
         },
-        preview: 'Our current contract is set to expire next month. I've attached the renewal terms for your review.',
+        preview: 'Our current contract is set to expire next month. I have attached the renewal terms for your review.',
         time: '9:00 AM',
         date: '2025-03-15',
         read: true,
@@ -280,7 +280,7 @@ const mockClients: Record<string, Client> = {
           name: 'Tony Stark',
           email: 'tony@stark.com'
         },
-        preview: 'I'd like to invite you to an exclusive demo of our new clean energy technology next Thursday at 2 PM.',
+        preview: 'I would like to invite you to an exclusive demo of our new clean energy technology next Thursday at 2 PM.',
         time: '4:45 PM',
         date: '2025-04-06',
         read: false,
@@ -294,7 +294,7 @@ const mockClients: Record<string, Client> = {
           name: 'Tony Stark',
           email: 'tony@stark.com'
         },
-        preview: 'Based on our recent discussions, I've drafted a proposal for a joint R&D initiative between our companies.',
+        preview: 'Based on our recent discussions, I have drafted a proposal for a joint R&D initiative between our companies.',
         time: '10:30 AM',
         date: '2025-04-02',
         read: true,
