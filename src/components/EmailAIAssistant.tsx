@@ -36,7 +36,12 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
         `${email.body}\n\nUSER QUERY: ${query}`
       );
       setAnalysis(result);
+      toast({
+        title: "Analysis complete ✨",
+        description: "AI has analyzed your email and query.",
+      });
     } catch (error) {
+      console.error("Error generating analysis:", error);
       toast({
         title: "Analysis failed ❌",
         description: "Could not generate AI analysis. Please try again.",
@@ -113,6 +118,8 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
             variant="outline" 
             onClick={handleAnalyze} 
             disabled={loading || !query.trim()}
+            aria-label="Send query"
+            title="Send query"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -130,6 +137,17 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
                 {analysis.split('\n').map((paragraph, i) => (
                   <p key={i}>{paragraph}</p>
                 ))}
+              </div>
+              
+              <div className="mt-4 pt-2 border-t border-blue-100">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-xs"
+                  onClick={() => setQuery("")}
+                >
+                  Ask another question 🔄
+                </Button>
               </div>
             </div>
           </>

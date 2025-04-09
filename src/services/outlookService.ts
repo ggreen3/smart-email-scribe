@@ -7,14 +7,20 @@ export const outlookService = {
   authToken: null,
   
   // Connect to Outlook - would use Microsoft Graph API in production
-  connect: async (email: string): Promise<boolean> => {
+  connect: async (email: string, password: string = ""): Promise<boolean> => {
     try {
       console.log('Connecting to Outlook for:', email);
       // In a real implementation, this would handle OAuth2 flow with Microsoft
       // For demo purposes, we'll simulate a successful connection
       localStorage.setItem('outlook_connected', 'true');
       localStorage.setItem('outlook_email', email);
+      
+      // Store the connection time to help with debugging
+      localStorage.setItem('outlook_connected_time', new Date().toISOString());
+      
+      // Ensure the connected state is set correctly
       outlookService.isConnected = true;
+      console.log('Successfully connected to Outlook');
       return true;
     } catch (error) {
       console.error('Error connecting to Outlook:', error);
@@ -26,6 +32,14 @@ export const outlookService = {
   checkConnection: (): boolean => {
     const connected = localStorage.getItem('outlook_connected') === 'true';
     outlookService.isConnected = connected;
+    console.log('Outlook connection status:', connected);
+    
+    if (connected) {
+      const email = localStorage.getItem('outlook_email');
+      const connectedTime = localStorage.getItem('outlook_connected_time');
+      console.log(`Connected as ${email} since ${connectedTime}`);
+    }
+    
     return connected;
   },
   
@@ -34,7 +48,9 @@ export const outlookService = {
     try {
       localStorage.removeItem('outlook_connected');
       localStorage.removeItem('outlook_email');
+      localStorage.removeItem('outlook_connected_time');
       outlookService.isConnected = false;
+      console.log('Disconnected from Outlook');
       return true;
     } catch (error) {
       console.error('Error disconnecting from Outlook:', error);
@@ -45,6 +61,7 @@ export const outlookService = {
   // Get all emails from Outlook
   getEmails: async (): Promise<EmailPreview[]> => {
     if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
       throw new Error('Not connected to Outlook');
     }
     
@@ -52,7 +69,7 @@ export const outlookService = {
     // For demo, we'll return realistic-looking Outlook emails
     await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
     
-    return [
+    const outlookEmails = [
       {
         id: "o1",
         subject: "Weekly Team Sync - Action Items 📝",
@@ -133,17 +150,55 @@ export const outlookService = {
         hasAttachments: true,
         labels: ["Work", "Finance", "Confidential"],
       },
+      {
+        id: "o6",
+        subject: "New Product Launch Timeline 🚀",
+        sender: {
+          name: "Marketing Team",
+          email: "marketing@contoso.com",
+          avatar: "https://i.pravatar.cc/150?img=22",
+        },
+        preview: "Here's the updated timeline for our upcoming product launch. Please review and provide feedback...",
+        time: "Apr 4",
+        date: "Apr 4",
+        read: true,
+        isStarred: true,
+        hasAttachments: true,
+        labels: ["Work", "Marketing"],
+      },
+      {
+        id: "o7",
+        subject: "Office 365 Tips & Tricks 💡",
+        sender: {
+          name: "IT Training",
+          email: "it.training@contoso.com",
+          avatar: "https://i.pravatar.cc/150?img=37",
+        },
+        preview: "Discover these time-saving features in Office 365 that can boost your productivity...",
+        time: "Apr 3",
+        date: "Apr 3",
+        read: false,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["IT", "Training"],
+      },
     ];
+    
+    console.log("Returning Outlook emails:", outlookEmails.length);
+    return outlookEmails;
   },
   
   // Get a single email from Outlook
   getEmailById: async (id: string): Promise<EmailDetail | null> => {
     if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
       throw new Error('Not connected to Outlook');
     }
     
     // In a real implementation, this would call Microsoft Graph API
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
+    
+    console.log("Getting Outlook email by ID:", id);
     
     const emails = {
       "o1": {
@@ -345,18 +400,81 @@ Finance Team`,
       },
     };
     
-    return emails[id] || null;
+    // If the email exists in our predefined list, return it
+    if (emails[id]) {
+      console.log("Found Outlook email:", emails[id].subject);
+      return emails[id];
+    }
+    
+    // For IDs not in the predefined list but starting with 'o', generate a dummy email
+    if (id.startsWith('o')) {
+      console.log("Generating dynamic Outlook email for unknown ID:", id);
+      return {
+        id: id,
+        subject: `Dynamic Outlook Email #${id.substr(1)} 📧`,
+        sender: {
+          name: "Outlook User",
+          email: "user@outlook.com",
+          avatar: "https://i.pravatar.cc/150?img=70",
+        },
+        preview: "This is a dynamically generated email for unknown Outlook IDs...",
+        time: "11:00 AM",
+        date: "Today",
+        read: true,
+        isStarred: false,
+        hasAttachments: false,
+        labels: ["Outlook", "Generated"],
+        body: `This is a dynamically generated email for unknown Outlook IDs.
+
+The requested ID was: ${id}
+
+In a real implementation, this would be fetched from Microsoft Graph API.
+
+Best regards,
+Outlook Service`,
+      };
+    }
+    
+    console.log("No matching Outlook email found for ID:", id);
+    return null;
   },
   
   // Send an email via Outlook
   sendEmail: async (emailData: any): Promise<boolean> => {
     if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
       throw new Error('Not connected to Outlook');
     }
     
     // In a real implementation, this would call Microsoft Graph API
     console.log('Sending email via Outlook:', emailData);
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+    
+    return true;
+  },
+  
+  // Mark an email as read in Outlook
+  markAsRead: async (id: string): Promise<boolean> => {
+    if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
+      throw new Error('Not connected to Outlook');
+    }
+    
+    console.log('Marking email as read in Outlook:', id);
+    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+    
+    return true;
+  },
+  
+  // Toggle star status of an email in Outlook
+  toggleStar: async (id: string): Promise<boolean> => {
+    if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
+      throw new Error('Not connected to Outlook');
+    }
+    
+    console.log('Toggling star status in Outlook:', id);
+    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
     
     return true;
   }

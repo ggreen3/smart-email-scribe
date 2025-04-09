@@ -190,7 +190,10 @@ export const emailService = {
     
     if (useOutlook) {
       try {
-        return await outlookService.getEmails();
+        console.log("Getting emails from Outlook...");
+        const outlookEmails = await outlookService.getEmails();
+        console.log("Received emails from Outlook:", outlookEmails.length);
+        return outlookEmails;
       } catch (error) {
         console.error("Outlook connection error:", error);
         // Fall back to mock data if Outlook fails
@@ -220,8 +223,11 @@ export const emailService = {
     
     if (useOutlook) {
       try {
-        // If ID starts with 'o', it's from Outlook
-        return await outlookService.getEmailById(id);
+        console.log("Getting email by ID from Outlook:", id);
+        // Check if ID starts with 'o' to identify Outlook emails
+        const email = await outlookService.getEmailById(id);
+        console.log("Received email from Outlook:", email?.subject);
+        return email;
       } catch (error) {
         console.error("Outlook connection error:", error);
         // Fall back to mock data if Outlook fails
@@ -248,6 +254,7 @@ export const emailService = {
     
     if (useOutlook) {
       try {
+        console.log("Sending email via Outlook:", emailData);
         return await outlookService.sendEmail(emailData);
       } catch (error) {
         console.error("Outlook connection error:", error);
@@ -263,6 +270,16 @@ export const emailService = {
   
   // Mark email as read
   markAsRead: async (id: string): Promise<boolean> => {
+    // If using Outlook and ID starts with 'o', use Outlook service
+    if (await emailService.useOutlook() && id.startsWith('o')) {
+      try {
+        return await outlookService.markAsRead(id);
+      } catch (error) {
+        console.error("Outlook error marking as read:", error);
+      }
+    }
+    
+    // Use mock data as fallback
     await delay(300);
     const email = mockEmails.find(email => email.id === id);
     
@@ -276,6 +293,16 @@ export const emailService = {
   
   // Star/unstar an email
   toggleStar: async (id: string): Promise<boolean> => {
+    // If using Outlook and ID starts with 'o', use Outlook service
+    if (await emailService.useOutlook() && id.startsWith('o')) {
+      try {
+        return await outlookService.toggleStar(id);
+      } catch (error) {
+        console.error("Outlook error toggling star:", error);
+      }
+    }
+    
+    // Use mock data as fallback
     await delay(300);
     const email = mockEmails.find(email => email.id === id);
     
