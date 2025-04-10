@@ -1,4 +1,3 @@
-
 import { emailService } from "./emailService";
 
 type MessageType = 'user' | 'assistant';
@@ -15,9 +14,11 @@ class AIWebSocketService {
   private connectionStatusListeners: ((connected: boolean) => void)[] = [];
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
+  private maxReconnectAttempts: number = 10; // Increased from 5
   private reconnectTimeout: NodeJS.Timeout | null = null;
-  private customSystemPrompt: string = "You are an AI assistant for email management. You have access to the user's emails and can help organize, summarize, and draft responses.";
+  private customSystemPrompt: string = "You are an AI assistant for email management. You have access to the user's emails and can help organize, summarize, draft responses, and provide insights based on email content.";
+  private pingInterval: NodeJS.Timeout | null = null;
+  private webSocketUrl: string = 'wss://backend.buildpicoapps.com/api/chatbot/chat';
 
   constructor() {
     this.connect();
@@ -25,29 +26,52 @@ class AIWebSocketService {
 
   private connect() {
     try {
-      console.log('Attempting to connect to WebSocket service...');
-      // Use the direct WebSocket URL provided
-      this.socket = new WebSocket('wss://backend.buildpicoapps.com/api/chatbot/chat');
+      if (this.socket) {
+        this.socket.close();
+        this.socket = null;
+      }
+      
+      console.log('Attempting to connect to WebSocket service at:', this.webSocketUrl);
+      this.socket = new WebSocket(this.webSocketUrl);
       
       this.socket.onopen = () => {
-        console.log('WebSocket connection established');
+        console.log('WebSocket connection established successfully');
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.notifyConnectionStatus(true);
         
         // Send system prompt on connection
-        if (this.socket) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({
             role: 'system',
             content: this.customSystemPrompt
           }));
+          console.log('System prompt sent to WebSocket');
         }
+        
+        // Setup ping to keep connection alive
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+        }
+        
+        this.pingInterval = setInterval(() => {
+          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000); // Send ping every 30 seconds
       };
       
       this.socket.onmessage = (event) => {
         try {
           console.log('WebSocket message received:', event.data);
           const data = JSON.parse(event.data);
+          
+          // Check if it's a pong response
+          if (data.type === 'pong') {
+            console.log('Received pong from server');
+            return;
+          }
+          
           const aiMessage: AIMessage = {
             id: Date.now().toString(),
             role: 'assistant',
@@ -70,19 +94,34 @@ class AIWebSocketService {
         this.isConnected = false;
         this.notifyConnectionStatus(false);
         
-        // Attempt to reconnect
+        // Clear ping interval
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+        }
+        
+        // Attempt to reconnect with exponential backoff
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
-          console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+          const delayMs = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+          console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delayMs/1000} seconds...`);
           
           // Clear any existing timeout
           if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
           }
           
-          this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
+          this.reconnectTimeout = setTimeout(() => this.connect(), delayMs);
         } else {
           console.log('Maximum reconnect attempts reached. Giving up.');
+          // Try one last time after a longer delay
+          if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+          }
+          this.reconnectTimeout = setTimeout(() => {
+            this.reconnectAttempts = 0;
+            this.connect();
+          }, 60000); // Wait 1 minute before retrying from scratch
         }
       };
     } catch (error) {
@@ -96,6 +135,18 @@ class AIWebSocketService {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       console.error('WebSocket is not connected. Attempting to reconnect...');
       this.connect();
+      
+      // Store the message and try to send it once connected
+      const tempMessageHandler = (connected: boolean) => {
+        if (connected) {
+          setTimeout(() => {
+            this.sendMessage(message, context);
+            this.removeConnectionStatusListener(tempMessageHandler);
+          }, 1000);
+        }
+      };
+      
+      this.addConnectionStatusListener(tempMessageHandler);
       return;
     }
     
@@ -128,7 +179,7 @@ class AIWebSocketService {
       console.log('Fetching email context for AI...');
       // Get recent emails for context
       const emails = await emailService.getEmails();
-      const emailContext = emails.slice(0, 5).map(email => 
+      const emailContext = emails.slice(0, 10).map(email => 
         `Subject: ${email.subject}\nFrom: ${email.sender.name} <${email.sender.email}>\nPreview: ${email.preview}`
       ).join('\n\n');
       
@@ -150,6 +201,7 @@ class AIWebSocketService {
         role: 'system',
         content: prompt
       }));
+      console.log('System prompt updated and sent to WebSocket');
     }
   }
   
@@ -193,6 +245,11 @@ class AIWebSocketService {
   }
   
   public close() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    
     if (this.socket) {
       this.socket.close();
       this.socket = null;
