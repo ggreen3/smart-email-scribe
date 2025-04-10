@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { Search, Filter, Star, Paperclip, Calendar, User, Tag, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText, Loader2 } from "lucide-react";
+import { Search, Filter, Star, Paperclip, Calendar, User, Tag, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText, Loader2, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,19 +9,34 @@ import { EmailPreview } from "@/types/email";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { LucideIcon } from "lucide-react";
+
+interface CustomAction {
+  label: string;
+  icon: LucideIcon;
+  action: (id: string) => void;
+  disabled?: boolean;
+}
 
 interface EmailListProps {
   emails: EmailPreview[];
   selectedEmail: string | null;
   onSelectEmail: (id: string) => void;
   loading?: boolean;
+  customActions?: CustomAction[];
 }
 
 type FilterType = "all" | "unread" | "flagged" | "attachments" | "recent";
 type SortType = "date" | "sender" | "subject";
 type SortDirection = "asc" | "desc";
 
-export default function EmailList({ emails, selectedEmail, onSelectEmail, loading = false }: EmailListProps) {
+export default function EmailList({ 
+  emails, 
+  selectedEmail, 
+  onSelectEmail, 
+  loading = false,
+  customActions = []
+}: EmailListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -353,6 +367,36 @@ export default function EmailList({ emails, selectedEmail, onSelectEmail, loadin
                   {email.isStarred && (
                     <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />
                   )}
+                  
+                  {/* Custom actions dropdown */}
+                  {customActions.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
+                          <MoreHorizontal className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {customActions.map((action, index) => {
+                          const Icon = action.icon;
+                          return (
+                            <DropdownMenuItem 
+                              key={index}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                action.action(email.id);
+                              }}
+                              disabled={action.disabled}
+                            >
+                              <Icon className="h-4 w-4 mr-2" />
+                              {action.label}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  
                   {email.labels && email.labels.map((label, i) => (
                     <Badge key={i} variant="outline" className="text-[0.65rem] px-1 py-0">
                       {label}

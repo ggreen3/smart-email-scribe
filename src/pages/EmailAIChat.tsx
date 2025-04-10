@@ -1,6 +1,6 @@
 
-import { useState } from "react";
-import { X, Send, Loader2, Brain, Copy, Search, Undo } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Send, Loader2, Brain, Copy, Search, Undo, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -8,12 +8,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import EmailSidebar from "@/components/EmailSidebar";
-
-type AIMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-};
+import { aiWebSocketService, AIMessage } from "@/services/aiWebSocketService";
+import { Badge } from "@/components/ui/badge";
 
 type SearchResult = {
   id: string;
@@ -30,21 +26,56 @@ export default function EmailAIChat() {
   const [input, setInput] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [showCustomPrompt, setShowCustomPrompt] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Handle WebSocket connections and messages
+  useEffect(() => {
+    const handleMessage = (message: AIMessage) => {
+      setMessages(prev => [...prev, message]);
+      if (message.role === 'assistant') {
+        setLoading(false);
+      }
+    };
+    
+    const handleConnectionStatus = (connected: boolean) => {
+      setIsConnected(connected);
+      if (connected) {
+        toast({
+          title: "AI Connected ✅",
+          description: "Connected to AI service successfully."
+        });
+      } else {
+        toast({
+          title: "AI Disconnected ❌",
+          description: "Lost connection to AI service. Trying to reconnect...",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    aiWebSocketService.addMessageListener(handleMessage);
+    aiWebSocketService.addConnectionStatusListener(handleConnectionStatus);
+    
+    return () => {
+      aiWebSocketService.removeMessageListener(handleMessage);
+      aiWebSocketService.removeConnectionStatusListener(handleConnectionStatus);
+    };
+  }, [toast]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
     
     const userMessage = input;
     setInput('');
-    
-    // Add user message to chat
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: 'user',
-      content: userMessage
-    }]);
-    
     setLoading(true);
     
     try {
@@ -52,8 +83,8 @@ export default function EmailAIChat() {
       if (userMessage.toLowerCase().includes('find') || userMessage.toLowerCase().includes('search')) {
         await handleSearchQuery(userMessage);
       } else {
-        // Regular AI response
-        await simulateAIResponse(userMessage);
+        // Send to WebSocket with email context
+        aiWebSocketService.sendMessageWithEmailContext(userMessage);
       }
     } catch (error) {
       console.error('Error processing message:', error);
@@ -62,52 +93,39 @@ export default function EmailAIChat() {
         description: "Failed to process your request. Please try again.",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
 
   const handleSearchQuery = async (query: string) => {
-    // Simulate search delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    setLoading(true);
     
-    // Mock search results based on query
-    const mockResults = [
-      { id: '1', subject: 'Q1 Financial Report', snippet: 'Attached is the Q1 financial report for your review...', date: 'Apr 5, 2025' },
-      { id: '2', subject: 'Project Status Update', snippet: 'The team has completed the initial phase of the project...', date: 'Apr 3, 2025' },
-      { id: '3', subject: 'Meeting Notes: Strategic Planning', snippet: 'Here are the notes from our strategic planning session...', date: 'Apr 1, 2025' },
-    ];
-    
-    setSearchResults(mockResults);
-    setShowSearch(true);
-    
-    // Add AI response
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: `I found ${mockResults.length} emails matching your search. Here are the results: 📧`
-    }]);
-  };
-
-  const simulateAIResponse = async (userQuery: string) => {
-    // Simulate AI thinking
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    let response = '';
-    
-    if (userQuery.toLowerCase().includes('summarize')) {
-      response = 'Based on your emails from the last 24 hours, you have 3 unread messages from clients, 2 pending action items, and an upcoming meeting tomorrow at 2:00 PM. Would you like me to generate a more detailed summary? 📋';
-    } else if (userQuery.toLowerCase().includes('draft') || userQuery.toLowerCase().includes('write')) {
-      response = 'Here\'s a draft response:\n\nDear [Name],\n\nThank you for your email. I have reviewed the information you provided and would be happy to discuss this further. I\'m available for a call this Thursday or Friday afternoon if that works for your schedule.\n\nBest regards,\n[Your Name] ✍️';
-    } else {
-      response = 'I understand you\'re asking about "' + userQuery + '". Is there a specific email or set of emails you would like me to analyze? I can help you find, summarize, or draft responses to emails. 🤔';
+    try {
+      // Simulate search delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Mock search results based on query
+      const mockResults = [
+        { id: '1', subject: 'Q1 Financial Report', snippet: 'Attached is the Q1 financial report for your review...', date: 'Apr 5, 2025' },
+        { id: '2', subject: 'Project Status Update', snippet: 'The team has completed the initial phase of the project...', date: 'Apr 3, 2025' },
+        { id: '3', subject: 'Meeting Notes: Strategic Planning', snippet: 'Here are the notes from our strategic planning session...', date: 'Apr 1, 2025' },
+      ];
+      
+      setSearchResults(mockResults);
+      setShowSearch(true);
+      
+      // Add AI response via WebSocket
+      aiWebSocketService.sendMessage(`I found ${mockResults.length} emails matching your search "${query}". Here are the results:`);
+    } catch (error) {
+      console.error('Error in search:', error);
+      toast({
+        title: "Search Failed ❌",
+        description: "Failed to search emails. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: response
-    }]);
   };
 
   const copyToClipboard = (text: string) => {
@@ -122,20 +140,79 @@ export default function EmailAIChat() {
     setShowSearch(false);
   };
 
+  const handleSetCustomPrompt = () => {
+    if (customPrompt.trim()) {
+      aiWebSocketService.setCustomSystemPrompt(customPrompt);
+      toast({
+        title: "Custom Prompt Set ✅",
+        description: "Your custom AI instructions have been applied."
+      });
+      setShowCustomPrompt(false);
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-email-background">
       <EmailSidebar />
       
       <div className="flex-1 flex flex-col">
         <div className="p-4 border-b border-email-border flex items-center justify-between">
-          <h2 className="font-medium flex items-center">
+          <div className="flex items-center">
             <Brain className="h-4 w-4 mr-2" />
-            AI Email Assistant 🤖
-          </h2>
-          <Button variant="ghost" size="sm">
-            <X className="h-4 w-4" />
-          </Button>
+            <h2 className="font-medium">AI Email Assistant 🤖</h2>
+            {isConnected ? (
+              <Badge variant="outline" className="ml-2 bg-green-50 text-green-600">
+                Connected ✅
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="ml-2 bg-red-50 text-red-600">
+                <WifiOff className="h-3 w-3 mr-1" />
+                Disconnected
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowCustomPrompt(!showCustomPrompt)}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              Custom Instructions
+            </Button>
+            <Button variant="ghost" size="sm">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
+        
+        {showCustomPrompt && (
+          <div className="p-4 border-b border-email-border bg-blue-50">
+            <h3 className="text-sm font-medium mb-2">Set Custom AI Instructions ✨</h3>
+            <Textarea
+              placeholder="Enter custom instructions for the AI (e.g., 'You are an email assistant that helps me organize my emails...')"
+              className="min-h-24 mb-2"
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+            />
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowCustomPrompt(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                size="sm"
+                onClick={handleSetCustomPrompt}
+                disabled={!customPrompt.trim()}
+              >
+                Apply Instructions
+              </Button>
+            </div>
+          </div>
+        )}
         
         <div className="w-full h-full flex flex-col overflow-hidden animate-slide-in">
           {showSearch ? (
@@ -202,6 +279,7 @@ export default function EmailAIChat() {
                     <span className="text-sm text-email-text-secondary">Thinking... 🧠</span>
                   </div>
                 )}
+                <div ref={messagesEndRef} />
               </div>
               
               <div className="p-4 border-t border-email-border">
@@ -211,7 +289,7 @@ export default function EmailAIChat() {
                     className="min-h-24 pr-16"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    disabled={loading}
+                    disabled={loading || !isConnected}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -221,7 +299,7 @@ export default function EmailAIChat() {
                   />
                   <Button
                     className="absolute bottom-3 right-3"
-                    disabled={loading || !input.trim()}
+                    disabled={loading || !input.trim() || !isConnected}
                     onClick={handleSend}
                   >
                     <Send className="h-4 w-4 mr-2" /> Send
@@ -234,6 +312,7 @@ export default function EmailAIChat() {
                     variant="link" 
                     className="h-auto p-0 text-xs text-email-primary"
                     onClick={() => setInput("Find emails from Acme Corp about the Q1 report")}
+                    disabled={!isConnected}
                   >
                     Find emails from Acme Corp about the Q1 report 🔍
                   </Button>
@@ -242,6 +321,7 @@ export default function EmailAIChat() {
                     variant="link" 
                     className="h-auto p-0 text-xs text-email-primary"
                     onClick={() => setInput("Summarize my emails from today")}
+                    disabled={!isConnected}
                   >
                     Summarize my emails from today 📋
                   </Button>
@@ -250,6 +330,7 @@ export default function EmailAIChat() {
                     variant="link" 
                     className="h-auto p-0 text-xs text-email-primary"
                     onClick={() => setInput("Draft a follow-up email to John about the project")}
+                    disabled={!isConnected}
                   >
                     Draft a follow-up email to John about the project ✍️
                   </Button>

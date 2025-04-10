@@ -1,6 +1,6 @@
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
-import { useToast } from "@/hooks/use-toast";
+import { aiWebSocketService } from "./aiWebSocketService";
 
 // Mock email data
 const mockEmails: EmailDetail[] = [
@@ -533,7 +533,34 @@ export const emailService = {
   
   // Get AI analysis for an email
   getAIAnalysis: async (emailContent: string): Promise<string> => {
-    await delay(1500);
-    return `This email appears to be about a project update. The sender is providing information about progress and requesting feedback. Consider responding with your thoughts on the current timeline.`;
+    try {
+      // First try to use the WebSocket AI service
+      if (aiWebSocketService.isWebSocketConnected()) {
+        // Create a promise to wait for the response
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("AI analysis timed out"));
+          }, 15000); // 15 second timeout
+          
+          const messageHandler = (message: { id: string; role: 'user' | 'assistant'; content: string }) => {
+            if (message.role === 'assistant') {
+              clearTimeout(timeout);
+              aiWebSocketService.removeMessageListener(messageHandler);
+              resolve(message.content);
+            }
+          };
+          
+          aiWebSocketService.addMessageListener(messageHandler);
+          aiWebSocketService.sendMessage("Analyze this email: " + emailContent);
+        });
+      } else {
+        throw new Error("WebSocket AI service not connected");
+      }
+    } catch (error) {
+      console.error("Error using WebSocket AI service:", error);
+      // Fallback to mock implementation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return `This email appears to be about a project update. The sender is providing information about progress and requesting feedback. Consider responding with your thoughts on the current timeline.`;
+    }
   },
 };

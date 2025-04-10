@@ -1,12 +1,13 @@
 
-import { useState } from "react";
-import { X, Sparkles, Send } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Sparkles, Send, Loader2, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { EmailDetail } from "@/types/email";
-import { emailService } from "@/services/emailService";
 import { useToast } from "@/hooks/use-toast";
+import { aiWebSocketService, AIMessage } from "@/services/aiWebSocketService";
 
 interface EmailAIAssistantProps {
   email: EmailDetail;
@@ -17,7 +18,31 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
   const [query, setQuery] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<AIMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const handleMessage = (message: AIMessage) => {
+      if (message.role === 'assistant') {
+        setAnalysis(message.content);
+        setLoading(false);
+      }
+      setMessages(prev => [...prev, message]);
+    };
+    
+    const handleConnectionStatus = (connected: boolean) => {
+      setIsConnected(connected);
+    };
+    
+    aiWebSocketService.addMessageListener(handleMessage);
+    aiWebSocketService.addConnectionStatusListener(handleConnectionStatus);
+    
+    return () => {
+      aiWebSocketService.removeMessageListener(handleMessage);
+      aiWebSocketService.removeConnectionStatusListener(handleConnectionStatus);
+    };
+  }, []);
 
   const handleAnalyze = async () => {
     if (!query.trim()) {
@@ -29,16 +54,33 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       return;
     }
     
-    setLoading(true);
-    try {
-      // In a real app, we'd pass both the email content and the query
-      const result = await emailService.getAIAnalysis(
-        `${email.body}\n\nUSER QUERY: ${query}`
-      );
-      setAnalysis(result);
+    if (!isConnected) {
       toast({
-        title: "Analysis complete ✨",
-        description: "AI has analyzed your email and query.",
+        title: "AI Service Disconnected ❌",
+        description: "Cannot connect to AI service. Please try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setLoading(true);
+    setAnalysis(null);
+    
+    try {
+      // Create email context
+      const emailContext = `
+Subject: ${email.subject}
+From: ${email.sender.name} <${email.sender.email}>
+Date: ${email.date} at ${email.time}
+Content: ${email.body}
+      `.trim();
+      
+      // Send the message with context to the WebSocket service
+      aiWebSocketService.sendMessage(query, emailContext);
+      
+      toast({
+        title: "Processing Query ✨",
+        description: "AI is analyzing your email and query.",
       });
     } catch (error) {
       console.error("Error generating analysis:", error);
@@ -47,7 +89,6 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
         description: "Could not generate AI analysis. Please try again.",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
@@ -55,10 +96,20 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
   return (
     <div className="w-96 border-l border-email-border h-full bg-white flex flex-col">
       <div className="p-4 border-b border-email-border flex justify-between items-center bg-blue-50">
-        <h3 className="font-semibold flex items-center">
+        <div className="flex items-center">
           <Sparkles className="h-4 w-4 mr-2 text-blue-500" />
-          AI Email Assistant 🤖
-        </h3>
+          <h3 className="font-semibold">AI Email Assistant 🤖</h3>
+          {isConnected ? (
+            <Badge variant="outline" className="ml-2 bg-green-50 text-green-600 text-xs">
+              Connected
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="ml-2 bg-red-50 text-red-600 text-xs">
+              <WifiOff className="h-3 w-3 mr-1" />
+              Offline
+            </Badge>
+          )}
+        </div>
         <Button variant="ghost" size="sm" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
@@ -93,12 +144,13 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
           placeholder="Ask me anything about this email... 💬"
           className="mb-2"
           rows={3}
+          disabled={!isConnected}
         />
         
         <div className="flex space-x-2 mb-4">
           <Button 
             onClick={handleAnalyze} 
-            disabled={loading || !query.trim()}
+            disabled={loading || !query.trim() || !isConnected}
             className="flex-1"
           >
             {loading ? (
@@ -117,7 +169,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
           <Button 
             variant="outline" 
             onClick={handleAnalyze} 
-            disabled={loading || !query.trim()}
+            disabled={loading || !query.trim() || !isConnected}
             aria-label="Send query"
             title="Send query"
           >
