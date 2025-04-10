@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from "react";
-import { X, Sparkles, Send, Loader2, WifiOff } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Sparkles, Send, Loader2, WifiOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -20,6 +20,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -33,6 +34,13 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
     
     const handleConnectionStatus = (connected: boolean) => {
       setIsConnected(connected);
+      if (!connected) {
+        toast({
+          title: "AI Disconnected ❌",
+          description: "Lost connection to AI service. Trying to reconnect...",
+          variant: "destructive"
+        });
+      }
     };
     
     aiWebSocketService.addMessageListener(handleMessage);
@@ -42,7 +50,12 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       aiWebSocketService.removeMessageListener(handleMessage);
       aiWebSocketService.removeConnectionStatusListener(handleConnectionStatus);
     };
-  }, []);
+  }, [toast]);
+
+  useEffect(() => {
+    // Scroll to bottom when messages change
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleAnalyze = async () => {
     if (!query.trim()) {
@@ -93,6 +106,14 @@ Content: ${email.body}
     }
   };
 
+  const handleReconnect = () => {
+    toast({
+      title: "Reconnecting...",
+      description: "Attempting to reconnect to AI service."
+    });
+    aiWebSocketService.reconnect();
+  };
+
   return (
     <div className="w-96 border-l border-email-border h-full bg-white flex flex-col">
       <div className="p-4 border-b border-email-border flex justify-between items-center bg-blue-50">
@@ -104,9 +125,17 @@ Content: ${email.body}
               Connected
             </Badge>
           ) : (
-            <Badge variant="outline" className="ml-2 bg-red-50 text-red-600 text-xs">
+            <Badge variant="outline" className="ml-2 bg-red-50 text-red-600 text-xs flex items-center">
               <WifiOff className="h-3 w-3 mr-1" />
               Offline
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-5 w-5 p-0 ml-1" 
+                onClick={handleReconnect}
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
             </Badge>
           )}
         </div>
@@ -155,7 +184,7 @@ Content: ${email.body}
           >
             {loading ? (
               <>
-                <Sparkles className="mr-2 h-4 w-4 animate-pulse" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Analyzing... ⏳
               </>
             ) : (
@@ -177,30 +206,41 @@ Content: ${email.body}
           </Button>
         </div>
         
-        {analysis && (
+        {messages.length > 0 && (
           <>
             <Separator className="my-4" />
-            <div className="p-3 bg-blue-50 rounded-md">
-              <h4 className="text-sm font-medium mb-2 flex items-center">
-                <Sparkles className="h-3 w-3 mr-1 text-blue-500" />
-                AI Analysis ✨
-              </h4>
-              <div className="text-sm space-y-2">
-                {analysis.split('\n').map((paragraph, i) => (
-                  <p key={i}>{paragraph}</p>
-                ))}
-              </div>
-              
-              <div className="mt-4 pt-2 border-t border-blue-100">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full text-xs"
-                  onClick={() => setQuery("")}
-                >
-                  Ask another question 🔄
-                </Button>
-              </div>
+            <div className="space-y-4">
+              {messages.map((message, index) => (
+                <div key={message.id} className={`p-3 ${message.role === 'assistant' ? 'bg-blue-50' : 'bg-gray-50'} rounded-md`}>
+                  <h4 className="text-sm font-medium mb-2 flex items-center">
+                    {message.role === 'assistant' ? (
+                      <>
+                        <Sparkles className="h-3 w-3 mr-1 text-blue-500" />
+                        AI Analysis ✨
+                      </>
+                    ) : (
+                      'Your Question 🤔'
+                    )}
+                  </h4>
+                  <div className="text-sm space-y-2">
+                    {message.content.split('\n').map((paragraph, i) => (
+                      <p key={i}>{paragraph}</p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+            
+            <div className="mt-4 pt-2 border-t border-blue-100">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full text-xs"
+                onClick={() => setQuery("")}
+              >
+                Ask another question 🔄
+              </Button>
             </div>
           </>
         )}

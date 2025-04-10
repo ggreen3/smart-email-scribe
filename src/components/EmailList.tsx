@@ -1,5 +1,6 @@
+
 import { useState, useEffect } from "react";
-import { Search, Filter, Star, Paperclip, Calendar, User, Tag, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText, Loader2, MoreHorizontal } from "lucide-react";
+import { Search, Filter, Star, Paperclip, Calendar, User, ChevronDown, ChevronUp, ArrowDownUp, Clock, BarChart, FileText, Loader2, MoreHorizontal, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ interface EmailListProps {
   onSelectEmail: (id: string) => void;
   loading?: boolean;
   customActions?: CustomAction[];
+  onRefresh?: () => void;
 }
 
 type FilterType = "all" | "unread" | "flagged" | "attachments" | "recent";
@@ -35,7 +37,8 @@ export default function EmailList({
   selectedEmail, 
   onSelectEmail, 
   loading = false,
-  customActions = []
+  customActions = [],
+  onRefresh
 }: EmailListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -44,11 +47,12 @@ export default function EmailList({
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [showAISummary, setShowAISummary] = useState(true);
   const [filteredEmails, setFilteredEmails] = useState<EmailPreview[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const { toast } = useToast();
 
   // Apply filters when emails, searchQuery, or activeFilter changes
   useEffect(() => {
-    let result = emails;
+    let result = [...emails]; // Create a copy to avoid modifying the original
     
     // Text search
     if (searchQuery) {
@@ -71,7 +75,6 @@ export default function EmailList({
         result = result.filter(email => email.hasAttachments);
         break;
       case "recent":
-        // Assuming we'd have a dateReceived property in a real app
         // For now, we'll just filter to most recent based on time
         const today = new Date().toLocaleDateString();
         result = result.filter(email => email.date === "Today" || email.date === today);
@@ -98,15 +101,15 @@ export default function EmailList({
       }
     });
     
-    // Notify about filter results if there was an active search or filter
+    setFilteredEmails(result);
+    
+    // Notify about filter results if there was an active search or filter and it's not just initial load
     if ((searchQuery || activeFilter !== "all") && result.length !== emails.length) {
       toast({
         title: "Filter Applied",
         description: `Found ${result.length} matching emails.`,
       });
     }
-    
-    setFilteredEmails(result);
   }, [emails, searchQuery, activeFilter, sortBy, sortDirection]);
   
   const toggleSort = (type: SortType) => {
@@ -127,21 +130,31 @@ export default function EmailList({
     setShowFilters(!showFilters);
   };
 
+  const handleRefresh = async () => {
+    if (refreshing || !onRefresh) return;
+    
+    setRefreshing(true);
+    try {
+      await onRefresh();
+      toast({
+        title: "Refreshed",
+        description: "Email list has been refreshed.",
+      });
+    } catch (error) {
+      console.error("Error refreshing emails:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // Get counts for AI summary
   const getEmailCounts = () => {
-    const now = new Date();
-    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
-    
-    const recentEmails = emails.filter(email => {
-      // For this demo, we'll just check for "Today" emails
-      return email.date === "Today";
-    });
-    
     const unreadEmails = emails.filter(email => !email.read);
     const starredEmails = emails.filter(email => email.isStarred);
+    const todayEmails = emails.filter(email => email.date === "Today");
     
     return {
-      recent: recentEmails.length,
+      recent: todayEmails.length,
       unread: unreadEmails.length,
       priority: starredEmails.length,
       awaiting: Math.min(5, Math.floor(unreadEmails.length / 2)) // Just for demo purposes
@@ -245,6 +258,18 @@ export default function EmailList({
             <Button variant="ghost" size="sm" className="p-1 h-8 ml-1" onClick={toggleFilter}>
               <Filter className="h-4 w-4 text-email-text-secondary" />
             </Button>
+            
+            {onRefresh && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="p-1 h-8 ml-1" 
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 text-email-text-secondary ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
           </div>
         </div>
         

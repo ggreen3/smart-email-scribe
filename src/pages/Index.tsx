@@ -9,8 +9,6 @@ import { outlookService } from "@/services/outlookService";
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
@@ -69,6 +67,9 @@ const EmailApp = () => {
       const data = await emailService.getEmails();
       setEmails(data);
       
+      // Dispatch a custom event to notify other components about the email update
+      window.dispatchEvent(new CustomEvent('emailsUpdated'));
+      
       toast({
         title: "Emails Synced",
         description: `Retrieved ${data.length} emails.`,
@@ -97,6 +98,9 @@ const EmailApp = () => {
       
       const data = await emailService.getEmails();
       setEmails(data);
+      
+      // Dispatch a custom event to notify other components about the email update
+      window.dispatchEvent(new CustomEvent('emailsUpdated'));
       
       toast({
         title: "Emails Refreshed",
@@ -131,6 +135,9 @@ const EmailApp = () => {
                   : email
               )
             );
+            
+            // Dispatch a custom event to notify other components about the email update
+            window.dispatchEvent(new CustomEvent('emailsUpdated'));
           }
         } catch (error) {
           console.error("Error fetching email details:", error);
@@ -194,6 +201,12 @@ const EmailApp = () => {
           description: "Your email has been sent successfully.",
         });
         setComposeOpen(false);
+        
+        // Refresh sent emails
+        const sentEmails = await emailService.getSentEmails();
+        
+        // Dispatch a custom event to notify other components about the email update
+        window.dispatchEvent(new CustomEvent('emailsUpdated'));
       } else {
         throw new Error("Failed to send email");
       }
@@ -211,6 +224,9 @@ const EmailApp = () => {
           ...emailData,
           createdAt: new Date().toISOString()
         });
+        
+        // Dispatch a custom event to notify other components about the email update
+        window.dispatchEvent(new CustomEvent('emailsUpdated'));
       } catch (draftError) {
         console.error("Error saving draft:", draftError);
       }
@@ -222,27 +238,13 @@ const EmailApp = () => {
       <EmailSidebar />
       
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-col w-80">
-          <div className="p-2 flex justify-end border-b border-email-border">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="gap-1"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-          </div>
-          
-          <EmailList 
-            emails={emails}
-            selectedEmail={selectedEmailId}
-            onSelectEmail={handleSelectEmail}
-            loading={loading}
-          />
-        </div>
+        <EmailList 
+          emails={emails}
+          selectedEmail={selectedEmailId}
+          onSelectEmail={handleSelectEmail}
+          loading={loading}
+          onRefresh={handleRefresh}
+        />
         
         <EmailView 
           email={selectedEmail}

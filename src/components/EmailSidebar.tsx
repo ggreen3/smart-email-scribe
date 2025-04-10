@@ -1,8 +1,10 @@
 
+import { useEffect, useState } from "react";
 import { Mail, Send, File, Archive, Trash2, Settings, Star, Users, AlertCircle, BarChart4, Clock, Building, Calendar, Tag, Folder, Search, BookOpen, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { emailService } from "@/services/emailService";
 
 type SidebarItem = {
   name: string;
@@ -13,31 +15,88 @@ type SidebarItem = {
   path: string;
 };
 
-const folders: SidebarItem[] = [
-  { name: "Inbox", icon: Mail, emoji: "📥", count: 12, isActive: true, path: "/" },
-  { name: "Sent", icon: Send, emoji: "📤", count: 0, path: "/sent" },
-  { name: "Drafts", icon: File, emoji: "📝", count: 3, path: "/drafts" },
-  { name: "Archive", icon: Archive, emoji: "🗄️", count: 0, path: "/archive" },
-  { name: "Spam", icon: AlertCircle, emoji: "⚠️", count: 0, path: "/spam" },
-  { name: "Trash", icon: Trash2, emoji: "🗑️", count: 0, path: "/trash" },
-];
-
-const categories: SidebarItem[] = [
-  { name: "Important", icon: Star, emoji: "⭐", count: 4, path: "/important" },
-  { name: "People", icon: Users, emoji: "👥", count: 8, path: "/people" },
-  { name: "Clients", icon: Building, emoji: "🏢", path: "/clients" },
-  { name: "Chasers", icon: Clock, emoji: "⏱️", path: "/chasers" },
-  { name: "Financials", icon: BarChart4, emoji: "💰", path: "/financials" },
-  { name: "Calendar", icon: Calendar, emoji: "📅", path: "/calendar" },
-  { name: "Newsletters", icon: BookOpen, emoji: "📚", path: "/newsletters" },
-  { name: "Insights", icon: Search, emoji: "🔍", path: "/summaries" },
-  { name: "AI Chat", icon: MessageSquare, emoji: "🤖", path: "/ai-chat" },
-  { name: "Settings", icon: Settings, emoji: "⚙️", path: "/settings" },
-];
-
 export default function EmailSidebar() {
   // Check the current path to highlight the active link
   const currentPath = window.location.pathname;
+  const [counts, setCounts] = useState({
+    inbox: 0,
+    drafts: 0,
+    sent: 0
+  });
+  const [userInfo, setUserInfo] = useState({
+    name: "User",
+    email: "user@example.com"
+  });
+  
+  useEffect(() => {
+    // Load email counts
+    const loadCounts = async () => {
+      try {
+        const emails = await emailService.getEmails();
+        const drafts = await emailService.getDrafts();
+        const sent = await emailService.getSentEmails();
+        
+        setCounts({
+          inbox: emails.filter(email => !email.read).length,
+          drafts: drafts.length,
+          sent: sent.length
+        });
+      } catch (error) {
+        console.error("Error loading email counts:", error);
+      }
+    };
+
+    // Load user info from localStorage
+    const loadUserInfo = () => {
+      const savedName = localStorage.getItem("user_name");
+      const savedEmail = localStorage.getItem("user_email") || localStorage.getItem("outlook_email");
+      
+      if (savedName || savedEmail) {
+        setUserInfo({
+          name: savedName || "User",
+          email: savedEmail || "user@example.com"
+        });
+      }
+    };
+    
+    loadCounts();
+    loadUserInfo();
+    
+    // Set up interval to refresh counts every 30 seconds
+    const interval = setInterval(loadCounts, 30000);
+    
+    // Listen for custom events for email updates
+    window.addEventListener('emailsUpdated', loadCounts);
+    window.addEventListener('userInfoUpdated', loadUserInfo);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('emailsUpdated', loadCounts);
+      window.removeEventListener('userInfoUpdated', loadUserInfo);
+    };
+  }, []);
+
+  const folders: SidebarItem[] = [
+    { name: "Inbox", icon: Mail, emoji: "📥", count: counts.inbox, isActive: true, path: "/" },
+    { name: "Sent", icon: Send, emoji: "📤", count: counts.sent, path: "/sent" },
+    { name: "Drafts", icon: File, emoji: "📝", count: counts.drafts, path: "/drafts" },
+    { name: "Archive", icon: Archive, emoji: "🗄️", count: 0, path: "/archive" },
+    { name: "Spam", icon: AlertCircle, emoji: "⚠️", count: 0, path: "/spam" },
+    { name: "Trash", icon: Trash2, emoji: "🗑️", count: 0, path: "/trash" },
+  ];
+
+  const categories: SidebarItem[] = [
+    { name: "Important", icon: Star, emoji: "⭐", count: 4, path: "/important" },
+    { name: "People", icon: Users, emoji: "👥", count: 8, path: "/people" },
+    { name: "Clients", icon: Building, emoji: "🏢", path: "/clients" },
+    { name: "Chasers", icon: Clock, emoji: "⏱️", path: "/chasers" },
+    { name: "Financials", icon: BarChart4, emoji: "💰", path: "/financials" },
+    { name: "Calendar", icon: Calendar, emoji: "📅", path: "/calendar" },
+    { name: "Newsletters", icon: BookOpen, emoji: "📚", path: "/newsletters" },
+    { name: "Insights", icon: Search, emoji: "🔍", path: "/summaries" },
+    { name: "AI Chat", icon: MessageSquare, emoji: "🤖", path: "/ai-chat" },
+    { name: "Settings", icon: Settings, emoji: "⚙️", path: "/settings" },
+  ];
   
   return (
     <div className="w-64 h-screen bg-email-sidepanel border-r border-email-border flex flex-col">
@@ -121,11 +180,11 @@ export default function EmailSidebar() {
       <div className="p-4 border-t border-email-border">
         <div className="flex items-center">
           <div className="h-8 w-8 rounded-full bg-email-primary text-white flex items-center justify-center">
-            <span className="text-sm font-medium">US</span>
+            <span className="text-sm font-medium">{userInfo.name.charAt(0)}</span>
           </div>
           <div className="ml-3">
-            <p className="text-sm font-medium text-email-text-primary">User 👤</p>
-            <p className="text-xs text-email-text-secondary">user@example.com</p>
+            <p className="text-sm font-medium text-email-text-primary">{userInfo.name} 👤</p>
+            <p className="text-xs text-email-text-secondary">{userInfo.email}</p>
           </div>
         </div>
       </div>
