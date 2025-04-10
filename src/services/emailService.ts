@@ -1,3 +1,4 @@
+
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
 import { aiWebSocketService } from "./aiWebSocketService";
@@ -187,346 +188,439 @@ export const emailService = {
   
   // Get all emails
   getEmails: async (): Promise<EmailPreview[]> => {
-    // Check if we should use Outlook
-    const useOutlook = await emailService.useOutlook();
-    
-    if (useOutlook) {
+    try {
+      // Check if we should use Outlook
+      const useOutlook = await emailService.useOutlook();
+      
+      if (useOutlook) {
+        try {
+          // Show notification that emails are being retrieved
+          const { toast } = await import("@/hooks/use-toast");
+          toast({
+            title: "Syncing with Outlook",
+            description: "Retrieving your emails from Outlook...",
+          });
+          
+          console.log("Getting emails from Outlook...");
+          
+          // Set a timeout for the email retrieval to prevent hanging
+          const timeoutPromise = new Promise<EmailPreview[]>((_, reject) => {
+            setTimeout(() => reject(new Error("Email retrieval timed out")), 15000);
+          });
+          
+          // Get emails with pagination to prevent memory issues
+          const outlookEmailsPromise = outlookService.getEmails();
+          
+          // Race between email retrieval and timeout
+          const outlookEmails = await Promise.race([outlookEmailsPromise, timeoutPromise]);
+          
+          console.log("Received emails from Outlook:", outlookEmails.length);
+          
+          // Show notification that emails have been retrieved
+          toast({
+            title: "Sync Complete",
+            description: `Retrieved ${outlookEmails.length} emails from Outlook.`,
+          });
+          
+          // Update global email counter for the UI
+          window.dispatchEvent(new CustomEvent('emailsUpdated'));
+          
+          return outlookEmails;
+        } catch (error) {
+          console.error("Outlook connection error:", error);
+          
+          // Show error notification
+          const { toast } = await import("@/hooks/use-toast");
+          toast({
+            title: "Sync Failed",
+            description: "Failed to retrieve emails from Outlook. Using cached data instead.",
+            variant: "destructive",
+          });
+          
+          // Fall back to mock data if Outlook fails
+        }
+      }
+      
+      // Use mock data if not using Outlook or if Outlook fails
+      await delay(800);
+      return mockEmails.map(email => ({
+        id: email.id,
+        subject: email.subject,
+        sender: email.sender,
+        preview: email.preview,
+        time: email.time,
+        date: email.date,
+        read: email.read,
+        isStarred: email.isStarred,
+        hasAttachments: email.hasAttachments,
+        labels: email.labels,
+      }));
+    } catch (error) {
+      console.error("Fatal error in getEmails:", error);
+      
+      // Show error notification
       try {
-        // Show notification that emails are being retrieved
-        
         const { toast } = await import("@/hooks/use-toast");
         toast({
-          title: "Syncing with Outlook",
-          description: "Retrieving your emails from Outlook...",
-        });
-        
-        console.log("Getting emails from Outlook...");
-        const outlookEmails = await outlookService.getEmails();
-        console.log("Received emails from Outlook:", outlookEmails.length);
-        
-        // Show notification that emails have been retrieved
-        toast({
-          title: "Sync Complete",
-          description: `Retrieved ${outlookEmails.length} emails from Outlook.`,
-        });
-        
-        return outlookEmails;
-      } catch (error) {
-        console.error("Outlook connection error:", error);
-        
-        // Show error notification
-        const { toast } = await import("@/hooks/use-toast");
-        toast({
-          title: "Sync Failed",
-          description: "Failed to retrieve emails from Outlook. Using cached data instead.",
+          title: "Error Retrieving Emails",
+          description: "There was a problem retrieving your emails. Please try again later.",
           variant: "destructive",
         });
-        
-        // Fall back to mock data if Outlook fails
+      } catch (e) {
+        console.error("Failed to show toast:", e);
       }
+      
+      // Return empty array as fallback
+      return [];
     }
-    
-    // Use mock data if not using Outlook or if Outlook fails
-    await delay(800);
-    return mockEmails.map(email => ({
-      id: email.id,
-      subject: email.subject,
-      sender: email.sender,
-      preview: email.preview,
-      time: email.time,
-      date: email.date,
-      read: email.read,
-      isStarred: email.isStarred,
-      hasAttachments: email.hasAttachments,
-      labels: email.labels,
-    }));
   },
   
   // Get a single email by ID
   getEmailById: async (id: string): Promise<EmailDetail | null> => {
-    // Check if we should use Outlook
-    const useOutlook = await emailService.useOutlook();
-    
-    if (useOutlook) {
-      try {
-        console.log("Getting email by ID from Outlook:", id);
-        // Check if ID starts with 'o' to identify Outlook emails
-        const email = await outlookService.getEmailById(id);
-        console.log("Received email from Outlook:", email?.subject);
-        return email;
-      } catch (error) {
-        console.error("Outlook connection error:", error);
-        // Fall back to mock data if Outlook fails
+    try {
+      // Check if we should use Outlook
+      const useOutlook = await emailService.useOutlook();
+      
+      if (useOutlook) {
+        try {
+          console.log("Getting email by ID from Outlook:", id);
+          // Check if ID starts with 'o' to identify Outlook emails
+          const email = await outlookService.getEmailById(id);
+          console.log("Received email from Outlook:", email?.subject);
+          return email;
+        } catch (error) {
+          console.error("Outlook connection error:", error);
+          // Fall back to mock data if Outlook fails
+        }
       }
+      
+      // Use mock data if not using Outlook or if Outlook fails
+      await delay(500);
+      const email = mockEmails.find(email => email.id === id);
+      
+      if (email) {
+        // Mark as read
+        email.read = true;
+        return { ...email };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error("Error in getEmailById:", error);
+      return null;
     }
-    
-    // Use mock data if not using Outlook or if Outlook fails
-    await delay(500);
-    const email = mockEmails.find(email => email.id === id);
-    
-    if (email) {
-      // Mark as read
-      email.read = true;
-      return { ...email };
-    }
-    
-    return null;
   },
   
   // Send a new email
   sendEmail: async (emailData: any): Promise<boolean> => {
-    // Check if we should use Outlook
-    const useOutlook = await emailService.useOutlook();
-    
-    if (useOutlook) {
-      try {
-        // Show notification that email is being sent
-        const { toast } = await import("@/hooks/use-toast");
-        toast({
-          title: "Sending Email",
-          description: "Your email is being sent via Outlook...",
-        });
-        
-        console.log("Sending email via Outlook:", emailData);
-        const success = await outlookService.sendEmail(emailData);
-        
-        if (success) {
-          // Show success notification
+    try {
+      // Check if we should use Outlook
+      const useOutlook = await emailService.useOutlook();
+      
+      if (useOutlook) {
+        try {
+          // Show notification that email is being sent
+          const { toast } = await import("@/hooks/use-toast");
           toast({
-            title: "Email Sent",
-            description: `Your email to ${emailData.recipient} has been sent.`,
+            title: "Sending Email",
+            description: "Your email is being sent via Outlook...",
           });
           
-          // Save to sent emails in localStorage for offline access
-          try {
-            const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
-            sentEmails.push({
-              ...emailData,
-              sentAt: new Date().toISOString(),
-              id: `sent_${Date.now()}`
+          console.log("Sending email via Outlook:", emailData);
+          const success = await outlookService.sendEmail(emailData);
+          
+          if (success) {
+            // Show success notification
+            toast({
+              title: "Email Sent",
+              description: `Your email to ${emailData.recipient} has been sent.`,
             });
-            localStorage.setItem('email_sent', JSON.stringify(sentEmails));
-          } catch (error) {
-            console.error('Error saving sent email to localStorage:', error);
+            
+            // Save to sent emails in localStorage for offline access
+            try {
+              const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+              sentEmails.push({
+                ...emailData,
+                sentAt: new Date().toISOString(),
+                id: `sent_${Date.now()}`
+              });
+              localStorage.setItem('email_sent', JSON.stringify(sentEmails));
+              
+              // Update counts
+              window.dispatchEvent(new CustomEvent('emailsUpdated'));
+            } catch (error) {
+              console.error('Error saving sent email to localStorage:', error);
+            }
           }
+          
+          return success;
+        } catch (error) {
+          console.error("Outlook error sending email:", error);
+          
+          // Show error notification
+          const { toast } = await import("@/hooks/use-toast");
+          toast({
+            title: "Send Failed",
+            description: "Failed to send email via Outlook. Saved as draft instead.",
+            variant: "destructive",
+          });
+          
+          // Save as draft if Outlook fails
+          await emailService.saveDraft(emailData);
+          return false;
         }
-        
-        return success;
-      } catch (error) {
-        console.error("Outlook error sending email:", error);
-        
-        // Show error notification
-        const { toast } = await import("@/hooks/use-toast");
-        toast({
-          title: "Send Failed",
-          description: "Failed to send email via Outlook. Saved as draft instead.",
-          variant: "destructive",
-        });
-        
-        // Save as draft if Outlook fails
-        await emailService.saveDraft(emailData);
-        return false;
       }
+      
+      // Use mock implementation if not using Outlook or if Outlook fails
+      await delay(1000);
+      console.log('Email sent (mock):', emailData);
+      
+      // Update the sent emails count in localStorage
+      try {
+        const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+        sentEmails.push({
+          ...emailData,
+          sentAt: new Date().toISOString(),
+          id: `sent_${Date.now()}`
+        });
+        localStorage.setItem('email_sent', JSON.stringify(sentEmails));
+        
+        // Update counts
+        window.dispatchEvent(new CustomEvent('emailsUpdated'));
+      } catch (error) {
+        console.error('Error saving sent email to localStorage:', error);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error in sendEmail:", error);
+      return false;
     }
-    
-    // Use mock implementation if not using Outlook or if Outlook fails
-    await delay(1000);
-    console.log('Email sent (mock):', emailData);
-    return true;
   },
   
   // Mark email as read
   markAsRead: async (id: string): Promise<boolean> => {
-    // If using Outlook and ID starts with 'o', use Outlook service
-    if (await emailService.useOutlook() && id.startsWith('o')) {
-      try {
-        return await outlookService.markAsRead(id);
-      } catch (error) {
-        console.error("Outlook error marking as read:", error);
+    try {
+      // If using Outlook and ID starts with 'o', use Outlook service
+      if (await emailService.useOutlook() && id.startsWith('o')) {
+        try {
+          return await outlookService.markAsRead(id);
+        } catch (error) {
+          console.error("Outlook error marking as read:", error);
+        }
       }
+      
+      // Use mock data as fallback
+      await delay(300);
+      const email = mockEmails.find(email => email.id === id);
+      
+      if (email) {
+        email.read = true;
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error in markAsRead:", error);
+      return false;
     }
-    
-    // Use mock data as fallback
-    await delay(300);
-    const email = mockEmails.find(email => email.id === id);
-    
-    if (email) {
-      email.read = true;
-      return true;
-    }
-    
-    return false;
   },
   
   // Star/unstar an email
   toggleStar: async (id: string): Promise<boolean> => {
-    // If using Outlook and ID starts with 'o', use Outlook service
-    if (await emailService.useOutlook() && id.startsWith('o')) {
-      try {
-        return await outlookService.toggleStar(id);
-      } catch (error) {
-        console.error("Outlook error toggling star:", error);
+    try {
+      // If using Outlook and ID starts with 'o', use Outlook service
+      if (await emailService.useOutlook() && id.startsWith('o')) {
+        try {
+          return await outlookService.toggleStar(id);
+        } catch (error) {
+          console.error("Outlook error toggling star:", error);
+        }
       }
+      
+      // Use mock data as fallback
+      await delay(300);
+      const email = mockEmails.find(email => email.id === id);
+      
+      if (email) {
+        email.isStarred = !email.isStarred;
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error in toggleStar:", error);
+      return false;
     }
-    
-    // Use mock data as fallback
-    await delay(300);
-    const email = mockEmails.find(email => email.id === id);
-    
-    if (email) {
-      email.isStarred = !email.isStarred;
-      return true;
-    }
-    
-    return false;
   },
   
   // Save draft in local storage and/or Outlook
   saveDraft: async (emailData: any): Promise<boolean> => {
-    // Check if we should use Outlook
-    const useOutlook = await emailService.useOutlook();
-    
-    if (useOutlook) {
-      try {
-        // Show notification that draft is being saved
-        const { toast } = await import("@/hooks/use-toast");
-        toast({
-          title: "Saving Draft",
-          description: "Your draft is being saved to Outlook...",
-        });
-        
-        console.log("Saving draft via Outlook:", emailData);
-        const success = await outlookService.saveDraft(emailData);
-        
-        if (success) {
-          // Show success notification
-          toast({
-            title: "Draft Saved",
-            description: "Your draft has been saved to Outlook.",
-          });
-        }
-        
-        return success;
-      } catch (error) {
-        console.error("Outlook error saving draft:", error);
-        
-        // Show error notification
-        const { toast } = await import("@/hooks/use-toast");
-        toast({
-          title: "Error Saving Draft",
-          description: "Failed to save draft to Outlook. Saved locally instead.",
-          variant: "destructive",
-        });
-        
-        // Fall back to localStorage if Outlook fails
-      }
-    }
-    
-    // Use localStorage as fallback
-    await delay(500);
     try {
-      const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
-      const newDraft = {
-        id: `draft_${Date.now()}`,
-        ...emailData,
-        createdAt: new Date().toISOString()
-      };
-      drafts.push(newDraft);
-      localStorage.setItem('email_drafts', JSON.stringify(drafts));
-      console.log('Draft saved to localStorage:', newDraft);
+      // Check if we should use Outlook
+      const useOutlook = await emailService.useOutlook();
       
-      // Show success notification
-      const { toast } = await import("@/hooks/use-toast");
-      toast({
-        title: "Draft Saved",
-        description: "Your draft has been saved locally.",
-      });
+      if (useOutlook) {
+        try {
+          // Show notification that draft is being saved
+          const { toast } = await import("@/hooks/use-toast");
+          toast({
+            title: "Saving Draft",
+            description: "Your draft is being saved to Outlook...",
+          });
+          
+          console.log("Saving draft via Outlook:", emailData);
+          const success = await outlookService.saveDraft(emailData);
+          
+          if (success) {
+            // Show success notification
+            toast({
+              title: "Draft Saved",
+              description: "Your draft has been saved to Outlook.",
+            });
+            
+            // Update counts
+            window.dispatchEvent(new CustomEvent('emailsUpdated'));
+          }
+          
+          return success;
+        } catch (error) {
+          console.error("Outlook error saving draft:", error);
+          
+          // Show error notification
+          const { toast } = await import("@/hooks/use-toast");
+          toast({
+            title: "Error Saving Draft",
+            description: "Failed to save draft to Outlook. Saved locally instead.",
+            variant: "destructive",
+          });
+          
+          // Fall back to localStorage if Outlook fails
+        }
+      }
       
-      return true;
+      // Use localStorage as fallback
+      await delay(500);
+      try {
+        const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+        const newDraft = {
+          id: `draft_${Date.now()}`,
+          ...emailData,
+          createdAt: new Date().toISOString()
+        };
+        drafts.push(newDraft);
+        localStorage.setItem('email_drafts', JSON.stringify(drafts));
+        console.log('Draft saved to localStorage:', newDraft);
+        
+        // Show success notification
+        const { toast } = await import("@/hooks/use-toast");
+        toast({
+          title: "Draft Saved",
+          description: "Your draft has been saved locally.",
+        });
+        
+        // Update counts
+        window.dispatchEvent(new CustomEvent('emailsUpdated'));
+        
+        return true;
+      } catch (error) {
+        console.error('Error saving draft to localStorage:', error);
+        return false;
+      }
     } catch (error) {
-      console.error('Error saving draft to localStorage:', error);
+      console.error("Error in saveDraft:", error);
       return false;
     }
   },
   
   // Get all drafts
   getDrafts: async (): Promise<EmailPreview[]> => {
-    // Check if we should use Outlook
-    const useOutlook = await emailService.useOutlook();
-    
-    if (useOutlook) {
-      try {
-        console.log("Getting drafts from Outlook...");
-        return await outlookService.getDrafts();
-      } catch (error) {
-        console.error("Outlook error getting drafts:", error);
-        // Fall back to localStorage if Outlook fails
-      }
-    }
-    
-    // Use localStorage as fallback
-    await delay(500);
     try {
-      const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
-      return drafts.map((draft: any) => ({
-        id: draft.id,
-        subject: draft.subject || "(No Subject)",
-        sender: {
-          name: "You",
-          email: localStorage.getItem('user_email') || "user@example.com",
-          avatar: "https://i.pravatar.cc/150?img=1"
-        },
-        preview: draft.content?.substring(0, 50) + "..." || "Draft email...",
-        time: new Date(draft.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        date: new Date(draft.createdAt).toLocaleDateString(),
-        read: true,
-        isStarred: false,
-        hasAttachments: false,
-        labels: ["Draft"]
-      }));
+      // Check if we should use Outlook
+      const useOutlook = await emailService.useOutlook();
+      
+      if (useOutlook) {
+        try {
+          console.log("Getting drafts from Outlook...");
+          return await outlookService.getDrafts();
+        } catch (error) {
+          console.error("Outlook error getting drafts:", error);
+          // Fall back to localStorage if Outlook fails
+        }
+      }
+      
+      // Use localStorage as fallback
+      await delay(500);
+      try {
+        const drafts = JSON.parse(localStorage.getItem('email_drafts') || '[]');
+        return drafts.map((draft: any) => ({
+          id: draft.id,
+          subject: draft.subject || "(No Subject)",
+          sender: {
+            name: "You",
+            email: localStorage.getItem('user_email') || "user@example.com",
+            avatar: "https://i.pravatar.cc/150?img=1"
+          },
+          preview: draft.content?.substring(0, 50) + "..." || "Draft email...",
+          time: new Date(draft.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          date: new Date(draft.createdAt).toLocaleDateString(),
+          read: true,
+          isStarred: false,
+          hasAttachments: false,
+          labels: ["Draft"]
+        }));
+      } catch (error) {
+        console.error('Error getting drafts from localStorage:', error);
+        return [];
+      }
     } catch (error) {
-      console.error('Error getting drafts from localStorage:', error);
+      console.error("Error in getDrafts:", error);
       return [];
     }
   },
   
   // Get all sent emails
   getSentEmails: async (): Promise<EmailPreview[]> => {
-    // Check if we should use Outlook
-    const useOutlook = await emailService.useOutlook();
-    
-    if (useOutlook) {
-      try {
-        console.log("Getting sent emails from Outlook...");
-        return await outlookService.getSentEmails();
-      } catch (error) {
-        console.error("Outlook error getting sent emails:", error);
-        // Fall back to localStorage if Outlook fails
-      }
-    }
-    
-    // Use localStorage as fallback
-    await delay(500);
     try {
-      const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
-      return sentEmails.map((email: any) => ({
-        id: email.id,
-        subject: email.subject || "(No Subject)",
-        sender: {
-          name: "You",
-          email: localStorage.getItem('user_email') || "user@example.com",
-          avatar: "https://i.pravatar.cc/150?img=1"
-        },
-        preview: `To: ${email.recipient} - ${email.content?.substring(0, 30)}...` || "Sent email...",
-        time: new Date(email.sentAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        date: new Date(email.sentAt).toLocaleDateString(),
-        read: true,
-        isStarred: false,
-        hasAttachments: false,
-        labels: ["Sent"]
-      }));
+      // Check if we should use Outlook
+      const useOutlook = await emailService.useOutlook();
+      
+      if (useOutlook) {
+        try {
+          console.log("Getting sent emails from Outlook...");
+          return await outlookService.getSentEmails();
+        } catch (error) {
+          console.error("Outlook error getting sent emails:", error);
+          // Fall back to localStorage if Outlook fails
+        }
+      }
+      
+      // Use localStorage as fallback
+      await delay(500);
+      try {
+        const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+        return sentEmails.map((email: any) => ({
+          id: email.id,
+          subject: email.subject || "(No Subject)",
+          sender: {
+            name: "You",
+            email: localStorage.getItem('user_email') || "user@example.com",
+            avatar: "https://i.pravatar.cc/150?img=1"
+          },
+          preview: `To: ${email.recipient} - ${email.content?.substring(0, 30)}...` || "Sent email...",
+          time: new Date(email.sentAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          date: new Date(email.sentAt).toLocaleDateString(),
+          read: true,
+          isStarred: false,
+          hasAttachments: false,
+          labels: ["Sent"]
+        }));
+      } catch (error) {
+        console.error('Error getting sent emails from localStorage:', error);
+        return [];
+      }
     } catch (error) {
-      console.error('Error getting sent emails from localStorage:', error);
+      console.error("Error in getSentEmails:", error);
       return [];
     }
   },
