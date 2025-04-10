@@ -1,4 +1,6 @@
+
 import { emailService } from "./emailService";
+import { outlookService } from "./outlookService";
 
 type MessageType = 'user' | 'assistant';
 
@@ -14,14 +16,35 @@ class AIWebSocketService {
   private connectionStatusListeners: ((connected: boolean) => void)[] = [];
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 10; // Increased from 5
+  private maxReconnectAttempts: number = 10;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private customSystemPrompt: string = "You are an AI assistant for email management. You have access to the user's emails and can help organize, summarize, draft responses, and provide insights based on email content.";
   private pingInterval: NodeJS.Timeout | null = null;
   private webSocketUrl: string = 'wss://backend.buildpicoapps.com/api/chatbot/chat';
+  private autoReconnect: boolean = true;
 
   constructor() {
     this.connect();
+    
+    // Listen for online/offline events
+    window.addEventListener('online', this.handleOnline);
+    window.addEventListener('offline', this.handleOffline);
+  }
+  
+  private handleOnline = () => {
+    console.log('Network connection restored. Reconnecting WebSocket...');
+    this.reconnect();
+  }
+  
+  private handleOffline = () => {
+    console.log('Network connection lost. WebSocket will reconnect when online.');
+    this.isConnected = false;
+    this.notifyConnectionStatus(false);
+    
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
   }
 
   private connect() {
@@ -57,6 +80,7 @@ class AIWebSocketService {
         this.pingInterval = setInterval(() => {
           if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify({ type: 'ping' }));
+            console.log('Ping sent to keep WebSocket alive');
           }
         }, 30000); // Send ping every 30 seconds
       };
@@ -100,8 +124,8 @@ class AIWebSocketService {
           this.pingInterval = null;
         }
         
-        // Attempt to reconnect with exponential backoff
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        // Attempt to reconnect with exponential backoff if auto-reconnect is enabled
+        if (this.autoReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           const delayMs = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
           console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delayMs/1000} seconds...`);
@@ -112,7 +136,7 @@ class AIWebSocketService {
           }
           
           this.reconnectTimeout = setTimeout(() => this.connect(), delayMs);
-        } else {
+        } else if (this.autoReconnect) {
           console.log('Maximum reconnect attempts reached. Giving up.');
           // Try one last time after a longer delay
           if (this.reconnectTimeout) {
@@ -177,13 +201,28 @@ class AIWebSocketService {
   public async sendMessageWithEmailContext(message: string) {
     try {
       console.log('Fetching email context for AI...');
-      // Get recent emails for context
-      const emails = await emailService.getEmails();
-      const emailContext = emails.slice(0, 10).map(email => 
+      // First try to get emails from Outlook if connected
+      let emails = [];
+      
+      if (outlookService.checkConnection()) {
+        console.log('Fetching Outlook emails for AI context');
+        try {
+          emails = await outlookService.getEmails();
+        } catch (error) {
+          console.error('Error getting Outlook emails:', error);
+          // Fall back to regular email service
+          emails = await emailService.getEmails();
+        }
+      } else {
+        // Fall back to regular email service
+        emails = await emailService.getEmails();
+      }
+      
+      const emailContext = emails.slice(0, 50).map(email => 
         `Subject: ${email.subject}\nFrom: ${email.sender.name} <${email.sender.email}>\nPreview: ${email.preview}`
       ).join('\n\n');
       
-      console.log('Sending message with email context');
+      console.log(`Sending message with context from ${emails.length} emails`);
       this.sendMessage(message, emailContext);
     } catch (error) {
       console.error('Error getting email context:', error);
@@ -238,13 +277,27 @@ class AIWebSocketService {
   public reconnect() {
     console.log("Manually triggering WebSocket reconnection");
     this.reconnectAttempts = 0;
+    this.autoReconnect = true;
     if (this.socket) {
       this.socket.close();
     }
     this.connect();
   }
   
+  public pauseReconnect() {
+    this.autoReconnect = false;
+    console.log("Auto-reconnect has been paused");
+  }
+  
+  public resumeReconnect() {
+    this.autoReconnect = true;
+    console.log("Auto-reconnect has been resumed");
+  }
+  
   public close() {
+    window.removeEventListener('online', this.handleOnline);
+    window.removeEventListener('offline', this.handleOffline);
+    
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
@@ -259,6 +312,8 @@ class AIWebSocketService {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
+    
+    this.autoReconnect = false;
   }
 }
 

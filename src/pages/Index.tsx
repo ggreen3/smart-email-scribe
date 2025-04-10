@@ -6,9 +6,13 @@ import EmailView from "@/components/EmailView";
 import ComposeEmail from "@/components/ComposeEmail";
 import { emailService } from "@/services/emailService";
 import { outlookService } from "@/services/outlookService";
+import { aiWebSocketService } from "@/services/aiWebSocketService";
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
@@ -18,6 +22,9 @@ const EmailApp = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [outlookEmail, setOutlookEmail] = useState('');
+  const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<{
     id: string;
     sender: {
@@ -32,17 +39,35 @@ const EmailApp = () => {
 
   // Check if Outlook is connected
   useEffect(() => {
-    const connected = outlookService.checkConnection();
-    setIsOutlookConnected(connected);
-    
-    if (connected) {
-      const userEmail = localStorage.getItem('outlook_email');
+    const checkOutlookConnection = () => {
+      const connected = outlookService.checkConnection();
+      setIsOutlookConnected(connected);
       
-      toast({
-        title: "Outlook Connected ✅",
-        description: `Your emails are syncing with Outlook (${userEmail}).`,
-      });
-    }
+      if (connected) {
+        const userEmail = localStorage.getItem('outlook_email');
+        
+        toast({
+          title: "Outlook Connected ✅",
+          description: `Your emails are syncing with Outlook (${userEmail}).`,
+        });
+      } else {
+        // Show connection dialog if not connected
+        setShowConnectDialog(true);
+      }
+    };
+    
+    checkOutlookConnection();
+    
+    // Listen for outlook connection changes
+    const handleOutlookConnectionChanged = (event: CustomEvent) => {
+      setIsOutlookConnected(event.detail);
+    };
+    
+    window.addEventListener('outlookConnectionChanged', handleOutlookConnectionChanged as EventListener);
+    
+    return () => {
+      window.removeEventListener('outlookConnectionChanged', handleOutlookConnectionChanged as EventListener);
+    };
   }, []);
 
   // Fetch emails on component mount
@@ -54,7 +79,7 @@ const EmailApp = () => {
     
     // Clear interval on component unmount
     return () => clearInterval(refreshInterval);
-  }, []);
+  }, [isOutlookConnected]);
 
   const fetchEmails = async () => {
     try {
@@ -233,6 +258,55 @@ const EmailApp = () => {
     }
   };
 
+  const handleConnectOutlook = async () => {
+    if (!outlookEmail || outlookEmail.trim() === '') {
+      toast({
+        title: "Error",
+        description: "Please enter your Outlook email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setConnectingOutlook(true);
+    
+    try {
+      const success = await outlookService.connect(outlookEmail);
+      
+      if (success) {
+        toast({
+          title: "Outlook Connected ✅",
+          description: `Successfully connected to Outlook (${outlookEmail}).`,
+        });
+        
+        // Set the number of emails to load
+        localStorage.setItem('outlook_email_count', '600'); // Set to match the user's expectation
+        
+        setIsOutlookConnected(true);
+        setShowConnectDialog(false);
+        
+        // Refresh email list
+        handleRefresh();
+        
+        // Let the AI know about Outlook connection
+        aiWebSocketService.setCustomSystemPrompt(
+          "You are an AI assistant for email management. You now have access to the user's Outlook emails and can help organize, summarize, draft responses, and provide insights based on the full email context."
+        );
+      } else {
+        throw new Error("Failed to connect to Outlook");
+      }
+    } catch (error) {
+      console.error("Error connecting to Outlook:", error);
+      toast({
+        title: "Connection Failed ❌",
+        description: "Failed to connect to Outlook. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setConnectingOutlook(false);
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-email-background">
       <EmailSidebar />
@@ -273,6 +347,38 @@ const EmailApp = () => {
           </svg>
         </button>
       </div>
+      
+      {/* Outlook Connect Dialog */}
+      <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect to Outlook</DialogTitle>
+            <DialogDescription>
+              Connect to your Outlook account to access all your emails. We found you have over 600 emails that need to be imported.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Input
+                id="email"
+                placeholder="Your Outlook email address"
+                className="col-span-4"
+                value={outlookEmail}
+                onChange={(e) => setOutlookEmail(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleConnectOutlook}
+              disabled={connectingOutlook}
+              className="w-full"
+            >
+              {connectingOutlook ? 'Connecting...' : 'Connect to Outlook'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

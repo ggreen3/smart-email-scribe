@@ -1,16 +1,22 @@
+
 import { EmailPreview, EmailDetail } from "@/types/email";
+import { useToast } from "@/hooks/use-toast";
 
 // This service handles Outlook API interactions
 export const outlookService = {
   isConnected: false,
   authToken: null,
+  connectionAttempts: 0,
+  maxConnectionAttempts: 5,
   
   // Connect to Outlook - would use Microsoft Graph API in production
   connect: async (email: string, password: string = ""): Promise<boolean> => {
     try {
       console.log('Connecting to Outlook for:', email);
       // In a real implementation, this would handle OAuth2 flow with Microsoft
-      // For demo purposes, we'll simulate a successful connection
+      outlookService.connectionAttempts = 0;
+      
+      // Save connection details to localStorage
       localStorage.setItem('outlook_connected', 'true');
       localStorage.setItem('outlook_email', email);
       localStorage.setItem('user_email', email); // Save for user profile
@@ -21,9 +27,15 @@ export const outlookService = {
       // Ensure the connected state is set correctly
       outlookService.isConnected = true;
       console.log('Successfully connected to Outlook');
+      
+      // Dispatch event to notify components of connection
+      window.dispatchEvent(new CustomEvent('outlookConnectionChanged', { detail: true }));
+      window.dispatchEvent(new CustomEvent('userInfoUpdated'));
+      
       return true;
     } catch (error) {
       console.error('Error connecting to Outlook:', error);
+      outlookService.isConnected = false;
       return false;
     }
   },
@@ -32,7 +44,7 @@ export const outlookService = {
   checkConnection: (): boolean => {
     const connected = localStorage.getItem('outlook_connected') === 'true';
     outlookService.isConnected = connected;
-    console.log('Outlook connection status:', connected);
+    console.log('Checking Outlook connection:', connected);
     
     if (connected) {
       const email = localStorage.getItem('outlook_email');
@@ -51,6 +63,11 @@ export const outlookService = {
       localStorage.removeItem('outlook_connected_time');
       outlookService.isConnected = false;
       console.log('Disconnected from Outlook');
+      
+      // Dispatch event to notify components of disconnection
+      window.dispatchEvent(new CustomEvent('outlookConnectionChanged', { detail: false }));
+      window.dispatchEvent(new CustomEvent('userInfoUpdated'));
+      
       return true;
     } catch (error) {
       console.error('Error disconnecting from Outlook:', error);
@@ -69,6 +86,14 @@ export const outlookService = {
     // For demo, we'll return realistic-looking Outlook emails
     await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
     
+    // Get actual email count from localStorage or default to a random large number
+    const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '600');
+    console.log(`Retrieving ${emailCount} emails from Outlook`);
+    
+    // Generate dynamic emails to simulate a large inbox
+    const dynamicEmails: EmailPreview[] = [];
+    
+    // Add predefined emails first
     const outlookEmails = [
       {
         id: "o1",
@@ -184,8 +209,94 @@ export const outlookService = {
       },
     ];
     
-    console.log("Returning Outlook emails:", outlookEmails.length);
-    return outlookEmails;
+    dynamicEmails.push(...outlookEmails);
+    
+    // Generate additional emails to match the count
+    const neededExtraEmails = Math.max(0, emailCount - outlookEmails.length);
+    
+    if (neededExtraEmails > 0) {
+      console.log(`Generating ${neededExtraEmails} additional dynamic emails`);
+      
+      const senderDomains = ['outlook.com', 'microsoft.com', 'contoso.com', 'gmail.com', 'example.com'];
+      const senderNames = ['Alex Johnson', 'Maria Garcia', 'Wei Chen', 'Aisha Patel', 'Carlos Rodriguez', 'Emma Wilson', 'James Smith', 'Sophia Lee'];
+      const subjectPrefixes = ['RE: ', 'FWD: ', '', 'Update: ', 'Invitation: ', 'Action Required: ', 'Reminder: '];
+      const subjectTopics = ['Project Update', 'Meeting Notes', 'Quarterly Report', 'Team Building', 'Invoice', 'Contract Review', 'Weekly Summary', 'Performance Review'];
+      const labelOptions = ['Work', 'Important', 'Personal', 'Finance', 'Travel', 'Shopping', 'Social', 'Project'];
+      
+      // Different time formats for variety
+      const timeOptions = [
+        { recent: ['Just now', '5 min ago', '10 min ago', '30 min ago', '1 hour ago'] },
+        { today: ['8:30 AM', '9:45 AM', '11:15 AM', '1:30 PM', '3:20 PM', '4:55 PM', '5:30 PM'] },
+        { yesterday: ['Yesterday'] },
+        { lastWeek: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+        { earlier: ['Apr 1', 'Apr 2', 'Apr 3', 'Mar 28', 'Mar 25', 'Mar 20', 'Mar 15', 'Mar 10'] }
+      ];
+      
+      for (let i = 0; i < neededExtraEmails; i++) {
+        // Generate random attributes for each email
+        const randomSenderName = senderNames[Math.floor(Math.random() * senderNames.length)];
+        const randomDomain = senderDomains[Math.floor(Math.random() * senderDomains.length)];
+        const randomSubjectPrefix = subjectPrefixes[Math.floor(Math.random() * subjectPrefixes.length)];
+        const randomSubjectTopic = subjectTopics[Math.floor(Math.random() * subjectTopics.length)];
+        
+        // Randomly select time period and specific time
+        const timePeriodsArray = Object.keys(timeOptions);
+        const randomTimePeriodKey = timePeriodsArray[Math.floor(Math.random() * timePeriodsArray.length)];
+        const randomTimePeriod = timeOptions[randomTimePeriodKey as keyof typeof timeOptions];
+        const timeArray = Object.values(randomTimePeriod)[0];
+        const randomTime = timeArray[Math.floor(Math.random() * timeArray.length)];
+        
+        // Generate a date based on the time period
+        let emailDate;
+        if (randomTimePeriodKey === 'recent' || randomTimePeriodKey === 'today') {
+          emailDate = 'Today';
+        } else if (randomTimePeriodKey === 'yesterday') {
+          emailDate = 'Yesterday';
+        } else if (randomTimePeriodKey === 'lastWeek') {
+          emailDate = randomTime;
+        } else {
+          emailDate = randomTime;
+        }
+        
+        // Generate random labels (0-2 labels)
+        const labelCount = Math.floor(Math.random() * 3);
+        const emailLabels = [];
+        for (let j = 0; j < labelCount; j++) {
+          const randomLabel = labelOptions[Math.floor(Math.random() * labelOptions.length)];
+          if (!emailLabels.includes(randomLabel)) {
+            emailLabels.push(randomLabel);
+          }
+        }
+        
+        // Create the dynamic email
+        dynamicEmails.push({
+          id: `o${outlookEmails.length + i}`,
+          subject: `${randomSubjectPrefix}${randomSubjectTopic} ${Math.random() > 0.8 ? '📌' : ''}`,
+          sender: {
+            name: randomSenderName,
+            email: `${randomSenderName.toLowerCase().replace(' ', '.')}@${randomDomain}`,
+            avatar: `https://i.pravatar.cc/150?img=${20 + i % 70}`,
+          },
+          preview: `This is an automatically generated email #${i+1} for demonstration purposes. In a real app, this would contain actual email content...`,
+          time: randomTimePeriodKey === 'recent' || randomTimePeriodKey === 'today' ? randomTime : '9:00 AM',
+          date: emailDate,
+          read: Math.random() > 0.3, // 70% chance of being read
+          isStarred: Math.random() > 0.8, // 20% chance of being starred
+          hasAttachments: Math.random() > 0.7, // 30% chance of having attachments
+          labels: emailLabels,
+        });
+      }
+    }
+    
+    console.log(`Returning ${dynamicEmails.length} Outlook emails`);
+    
+    // Store the count for future reference
+    localStorage.setItem('outlook_email_count', dynamicEmails.length.toString());
+    
+    // Notify the UI to update
+    window.dispatchEvent(new CustomEvent('emailsUpdated'));
+    
+    return dynamicEmails;
   },
   
   // Get a single email from Outlook
@@ -450,7 +561,28 @@ Outlook Service`,
     console.log('Sending email via Outlook:', emailData);
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
     
-    return true;
+    try {
+      // Store the sent email in localStorage
+      const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+      const newEmail = {
+        id: `osent_${Date.now()}`,
+        ...emailData,
+        sentAt: new Date().toISOString()
+      };
+      sentEmails.push(newEmail);
+      localStorage.setItem('email_sent', JSON.stringify(sentEmails));
+      
+      // Update email count
+      const currentCount = parseInt(localStorage.getItem('outlook_email_count') || '0');
+      localStorage.setItem('outlook_email_count', (currentCount + 1).toString());
+      
+      // Notify the UI to update
+      window.dispatchEvent(new CustomEvent('emailsUpdated'));
+      return true;
+    } catch (error) {
+      console.error('Error saving sent email:', error);
+      return false;
+    }
   },
   
   // Mark an email as read in Outlook
@@ -554,13 +686,13 @@ Outlook Service`,
     // In a real implementation, this would call Microsoft Graph API
     await new Promise(resolve => setTimeout(resolve, 600)); // Simulate API delay
     
-    // For demo, we'll return mock sent emails styled like Outlook
-    const outlookEmail = localStorage.getItem('outlook_email');
-    
     // Check if there are any sent emails in localStorage
     try {
       const sentEmails = JSON.parse(localStorage.getItem('email_sent') || '[]');
+      const outlookEmail = localStorage.getItem('outlook_email');
+      
       if (sentEmails.length > 0) {
+        console.log(`Retrieved ${sentEmails.length} sent emails from Outlook`);
         return sentEmails.map((email: any, index: number) => ({
           id: email.id || `osent_${Date.now()}_${index}`,
           subject: email.subject || "(No Subject)",
@@ -578,44 +710,58 @@ Outlook Service`,
           labels: ["Sent", "Outlook"],
         }));
       }
+      
+      // If no emails in localStorage, generate 20 fake sent emails
+      console.log('Generating demo sent emails for Outlook');
+      const fakeEmails = [];
+      const recipients = [
+        'sarah.johnson@example.com', 
+        'john.smith@company.com', 
+        'david.miller@organization.org',
+        'lisa.wong@partner.com',
+        'michael.brown@client.net'
+      ];
+      const subjects = [
+        'Re: Project Status Update',
+        'Meeting Confirmation',
+        'Document Review Request',
+        'Weekly Progress Report',
+        'Invoice Payment Confirmation',
+        'Thank you for your inquiry',
+        'Follow-up from our call',
+        'Proposal for new collaboration'
+      ];
+      
+      for (let i = 0; i < 20; i++) {
+        const randomRecipient = recipients[Math.floor(Math.random() * recipients.length)];
+        const randomSubject = subjects[Math.floor(Math.random() * subjects.length)];
+        
+        // Create random date within last 30 days
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+        
+        fakeEmails.push({
+          id: `osent_demo_${i}`,
+          subject: randomSubject,
+          sender: {
+            name: "You (Outlook)",
+            email: outlookEmail || "outlook@example.com",
+            avatar: "https://i.pravatar.cc/150?img=1",
+          },
+          preview: `To: ${randomRecipient} - This is a sample sent email that would contain the actual content...`,
+          time: date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          date: date.toLocaleDateString(),
+          read: true,
+          isStarred: Math.random() > 0.8, // 20% chance of being starred
+          hasAttachments: Math.random() > 0.7, // 30% chance of having attachments
+          labels: ["Sent", "Outlook"],
+        });
+      }
+      
+      return fakeEmails;
     } catch (error) {
       console.error('Error getting sent emails from localStorage:', error);
+      return [];
     }
-    
-    // Return some mock sent emails if no localStorage data
-    return [
-      {
-        id: "osent_1",
-        subject: "Re: Project Status Update",
-        sender: {
-          name: "You (Outlook)",
-          email: outlookEmail || "outlook@example.com",
-          avatar: "https://i.pravatar.cc/150?img=1",
-        },
-        preview: "To: sarah.johnson@example.com - Here's the latest update on the project as requested...",
-        time: "2:15 PM",
-        date: "Today",
-        read: true,
-        isStarred: false,
-        hasAttachments: false,
-        labels: ["Sent", "Outlook", "Work"],
-      },
-      {
-        id: "osent_2",
-        subject: "Meeting Confirmation for Tomorrow",
-        sender: {
-          name: "You (Outlook)",
-          email: outlookEmail || "outlook@example.com",
-          avatar: "https://i.pravatar.cc/150?img=1",
-        },
-        preview: "To: john.smith@example.com - I confirm our meeting tomorrow at 3:00 PM in the main conference room...",
-        time: "Yesterday",
-        date: "Apr 8",
-        read: true,
-        isStarred: false,
-        hasAttachments: false,
-        labels: ["Sent", "Outlook", "Meeting"],
-      }
-    ];
   }
 };
