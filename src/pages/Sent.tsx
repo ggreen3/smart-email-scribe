@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Send, Paperclip, Star, Archive, Trash2, Loader2 } from "lucide-react";
+import { Send, Paperclip, Star, Archive, Trash2, Loader2, Brain } from "lucide-react";
 import EmailSidebar from "@/components/EmailSidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,17 +11,45 @@ import { emailService } from "@/services/emailService";
 import { outlookService } from "@/services/outlookService";
 import { useToast } from "@/hooks/use-toast";
 import { EmailPreview } from "@/types/email";
+import { Textarea } from "@/components/ui/textarea";
+import { aiWebSocketService, AIMessage } from "@/services/aiWebSocketService";
 
 export default function Sent() {
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [emails, setEmails] = useState<EmailPreview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [inputMessage, setInputMessage] = useState("");
+  const [chatMessages, setChatMessages] = useState<AIMessage[]>([
+    { id: '1', role: 'assistant', content: 'Hello! I can help you with your emails. What would you like to know? 😊' }
+  ]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     // Check if Outlook is connected
     const connected = outlookService.checkConnection();
     setIsOutlookConnected(connected);
+    
+    // Check AI connection status
+    const aiConnected = aiWebSocketService.isWebSocketConnected();
+    setIsConnected(aiConnected);
+    
+    // Setup AI connection listeners
+    const handleConnectionStatus = (connected: boolean) => {
+      setIsConnected(connected);
+    };
+    
+    const handleMessage = (message: AIMessage) => {
+      setChatMessages(prev => [...prev, message]);
+      if (message.role === 'assistant') {
+        setIsSending(false);
+      }
+    };
+    
+    aiWebSocketService.addConnectionStatusListener(handleConnectionStatus);
+    aiWebSocketService.addMessageListener(handleMessage);
     
     // Fetch sent emails
     const fetchSentEmails = async () => {
@@ -52,6 +80,12 @@ export default function Sent() {
     };
     
     fetchSentEmails();
+    
+    // Cleanup listeners
+    return () => {
+      aiWebSocketService.removeConnectionStatusListener(handleConnectionStatus);
+      aiWebSocketService.removeMessageListener(handleMessage);
+    };
   }, []);
 
   const handleArchive = (id: string) => {
@@ -75,21 +109,103 @@ export default function Sent() {
       email.id === id ? { ...email, isStarred: !email.isStarred } : email
     ));
   };
+  
+  const sendMessage = () => {
+    if (!inputMessage.trim() || !isConnected) return;
+    
+    // Create a context about the sent emails
+    const emailContext = `The user is viewing their sent emails. They have ${emails.length} sent emails. The most recent ones include: ${emails.slice(0, 3).map(e => e.subject).join(", ")}.`;
+    
+    setIsSending(true);
+    aiWebSocketService.sendMessageWithEmailContext(inputMessage, emailContext);
+    setInputMessage("");
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-email-background">
       <EmailSidebar />
       <div className="flex-1 overflow-auto">
         <div className="p-6">
-          <div className="flex items-center mb-6">
-            <Send className="h-6 w-6 mr-2 text-blue-500" />
-            <h1 className="text-2xl font-bold">Sent Emails 📤</h1>
-            {isOutlookConnected && (
-              <Badge variant="outline" className="ml-3 bg-blue-50 text-blue-600">
-                Outlook Connected ✅
-              </Badge>
-            )}
+          <div className="flex items-center mb-6 justify-between">
+            <div className="flex items-center">
+              <Send className="h-6 w-6 mr-2 text-blue-500" />
+              <h1 className="text-2xl font-bold">Sent Emails 📤</h1>
+              {isOutlookConnected && (
+                <Badge variant="outline" className="ml-3 bg-blue-50 text-blue-600">
+                  Outlook Connected ✅
+                </Badge>
+              )}
+            </div>
+            <Button 
+              variant={showAIChat ? "default" : "outline"}
+              onClick={() => setShowAIChat(!showAIChat)}
+              className="flex items-center gap-2"
+            >
+              <Brain className="h-4 w-4" />
+              {showAIChat ? "Hide AI Chat" : "Show AI Chat"}
+            </Button>
           </div>
+          
+          {showAIChat && (
+            <div className="mb-6 p-4 border rounded-md bg-card">
+              <h2 className="text-lg font-semibold mb-3 flex items-center">
+                <Brain className="h-5 w-5 mr-2 text-blue-500" />
+                AI Assistant 🤖
+              </h2>
+              
+              <div className="bg-muted/50 rounded-md p-3 mb-3 max-h-[300px] overflow-y-auto">
+                {chatMessages.map((msg) => (
+                  <div 
+                    key={msg.id} 
+                    className={cn(
+                      "mb-2 p-2 rounded-md",
+                      msg.role === 'user' ? "bg-blue-100 ml-8" : "bg-gray-100 mr-8"
+                    )}
+                  >
+                    <p className="text-sm">{msg.content}</p>
+                  </div>
+                ))}
+                {isSending && (
+                  <div className="flex items-center justify-center p-2">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <span className="text-sm">AI is thinking...</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Ask a question about your sent emails..."
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  className="flex-1"
+                  disabled={!isConnected || isSending}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                />
+                <Button 
+                  onClick={sendMessage} 
+                  disabled={!inputMessage.trim() || !isConnected || isSending}
+                >
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              
+              {!isConnected && (
+                <p className="text-sm text-destructive mt-2">
+                  AI service is currently disconnected. Please try again later.
+                </p>
+              )}
+            </div>
+          )}
           
           {loading ? (
             <div className="flex items-center justify-center p-12">
