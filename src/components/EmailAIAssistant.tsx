@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from "react";
-import { X, Sparkles, Send, Loader2, WifiOff, RefreshCw } from "lucide-react";
+import { X, Sparkles, Send, Loader2, WifiOff, RefreshCw, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
 import { aiWebSocketService, AIMessage } from "@/services/aiWebSocketService";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface EmailAIAssistantProps {
   email: EmailDetail;
@@ -21,13 +22,16 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check initial connection status
+    // Check initial connection status and get system prompt
     const initialStatus = aiWebSocketService.isWebSocketConnected();
     setIsConnected(initialStatus);
+    setSystemPrompt(aiWebSocketService.getSystemPrompt());
     
     if (!initialStatus) {
       console.log("AI service disconnected on mount, attempting to reconnect...");
@@ -52,13 +56,20 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
           description: "Lost connection to AI service. Trying to reconnect...",
           variant: "destructive"
         });
-      } else if (reconnectAttempt > 0) {
-        // Only show reconnection success if we previously tried to reconnect
-        toast({
-          title: "AI Connected ✅",
-          description: "Successfully reconnected to AI service.",
-        });
-        setReconnectAttempt(0);
+        setIsReconnecting(true);
+      } else {
+        if (reconnectAttempt > 0 || isReconnecting) {
+          // Only show reconnection success if we previously tried to reconnect
+          toast({
+            title: "AI Connected ✅",
+            description: "Successfully reconnected to AI service.",
+          });
+          setReconnectAttempt(0);
+          setIsReconnecting(false);
+        }
+        
+        // Update system prompt on successful connection
+        setSystemPrompt(aiWebSocketService.getSystemPrompt());
       }
     };
     
@@ -69,7 +80,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       aiWebSocketService.removeMessageListener(handleMessage);
       aiWebSocketService.removeConnectionStatusListener(handleConnectionStatus);
     };
-  }, [toast, reconnectAttempt]);
+  }, [toast, reconnectAttempt, isReconnecting]);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -127,6 +138,8 @@ Content: ${email.body}
 
   const handleReconnect = () => {
     setReconnectAttempt(prev => prev + 1);
+    setIsReconnecting(true);
+    
     toast({
       title: "Reconnecting...",
       description: "Attempting to reconnect to AI service."
@@ -144,8 +157,19 @@ Content: ${email.body}
           description: "Still unable to connect. Please try again later or refresh the page.",
           variant: "destructive"
         });
+        setIsReconnecting(false);
       }
-    }, 3000);
+    }, 5000);
+  };
+  
+  // Handle "Enter" key press to send the query
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!loading && query.trim() && isConnected) {
+        handleAnalyze();
+      }
+    }
   };
 
   return (
@@ -168,10 +192,23 @@ Content: ${email.body}
                 className="h-5 w-5 p-0 ml-1" 
                 onClick={handleReconnect}
               >
-                <RefreshCw className={`h-3 w-3 ${reconnectAttempt > 0 && !isConnected ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-3 w-3 ${isReconnecting ? 'animate-spin' : ''}`} />
               </Button>
             </Badge>
           )}
+          
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-1">
+                  <Info className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs">
+                <p>System prompt: {systemPrompt.substring(0, 100)}...</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
         <Button variant="ghost" size="sm" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -204,10 +241,11 @@ Content: ${email.body}
         <Textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Ask me anything about this email... 💬"
           className="mb-2"
           rows={3}
-          disabled={!isConnected}
+          disabled={!isConnected || loading}
         />
         
         <div className="flex space-x-2 mb-4">
@@ -272,6 +310,7 @@ Content: ${email.body}
                 size="sm" 
                 className="w-full text-xs"
                 onClick={() => setQuery("")}
+                disabled={loading}
               >
                 Ask another question 🔄
               </Button>

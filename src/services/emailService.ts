@@ -202,50 +202,141 @@ export const emailService = {
           
           console.log("Getting emails from Outlook...");
           
-          // Set a timeout for the email retrieval to prevent hanging
-          const timeoutPromise = new Promise<EmailPreview[]>((_, reject) => {
-            setTimeout(() => reject(new Error("Email retrieval timed out after 20 seconds")), 20000);
-          });
-          
-          // Implement batched retrieval to prevent memory issues
-          const getBatchedEmails = async () => {
-            console.log("Using batched email retrieval from Outlook");
-            
-            // First try to get count before full retrieval
-            const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '600');
-            console.log(`Expected email count: ${emailCount}`);
-            
-            // Adjust batch size based on expected email count
-            const batchSize = emailCount > 300 ? 150 : 300;
-            let allEmails: EmailPreview[] = [];
-            
-            // Get emails in batches
-            for (let offset = 0; offset < emailCount; offset += batchSize) {
-              try {
-                console.log(`Getting batch ${offset}-${offset + batchSize} of ${emailCount} emails`);
-                const batchEmails = await outlookService.getEmailsBatch(offset, batchSize);
-                if (batchEmails.length > 0) {
-                  allEmails = [...allEmails, ...batchEmails];
-                  console.log(`Retrieved ${allEmails.length} of ${emailCount} emails so far`);
-                } else {
-                  // If batch is empty, we've reached the end
-                  break;
+          // Implement more reliable batched retrieval with multiple fallbacks
+          const fetchWithRetry = async (attempt = 1, maxAttempts = 3) => {
+            try {
+              // Set a timeout for the email retrieval to prevent hanging
+              const timeoutPromise = new Promise<EmailPreview[]>((_, reject) => {
+                setTimeout(() => reject(new Error("Email retrieval timed out after 30 seconds")), 30000);
+              });
+              
+              // Get emails in batches with more reliable error handling
+              const getBatchedEmails = async () => {
+                console.log("Using enhanced batched email retrieval from Outlook");
+                
+                // First try to get count before full retrieval
+                const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '600');
+                console.log(`Expected email count: ${emailCount}`);
+                
+                // Adjust batch size based on expected email count - smaller batches for more reliability
+                const batchSize = emailCount > 300 ? 75 : 150;
+                let allEmails: EmailPreview[] = [];
+                
+                // Get cached emails first as a fallback
+                let cachedEmails: EmailPreview[] = [];
+                try {
+                  cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+                  console.log(`Found ${cachedEmails.length} cached emails that will be used as fallback`);
+                } catch (e) {
+                  console.error("Error parsing cached emails:", e);
                 }
-              } catch (error) {
-                console.error(`Error getting batch ${offset}-${offset + batchSize}:`, error);
-                // Continue with what we have so far
-                break;
+                
+                // Get emails in smaller batches with progressive timeouts
+                for (let offset = 0; offset < emailCount; offset += batchSize) {
+                  try {
+                    console.log(`Getting batch ${offset}-${offset + batchSize} of ${emailCount} emails`);
+                    const batchEmails = await outlookService.getEmailsBatch(offset, batchSize);
+                    
+                    if (batchEmails && batchEmails.length > 0) {
+                      allEmails = [...allEmails, ...batchEmails];
+                      console.log(`Retrieved ${allEmails.length} of ${emailCount} emails so far`);
+                      
+                      // Save partial results to cache in case of later failure
+                      if (allEmails.length > 0 && allEmails.length % 150 === 0) {
+                        try {
+                          localStorage.setItem('cached_outlook_emails', JSON.stringify(allEmails));
+                          console.log(`Cached ${allEmails.length} emails as failsafe`);
+                        } catch (cacheError) {
+                          console.error("Error caching partial emails:", cacheError);
+                        }
+                      }
+                    } else {
+                      console.log("Received empty batch, likely reached the end of available emails");
+                      break;
+                    }
+                    
+                    // If we have a reasonable number of emails, we can stop to prevent overloading
+                    if (allEmails.length >= 200 && allEmails.length >= emailCount * 0.75) {
+                      console.log("Retrieved sufficient emails, stopping batch retrieval");
+                      break;
+                    }
+                  } catch (batchError) {
+                    console.error(`Error getting batch ${offset}-${offset + batchSize}:`, batchError);
+                    
+                    // If we have at least some emails, continue with what we have
+                    if (allEmails.length > 0) {
+                      console.log(`Continuing with ${allEmails.length} emails despite batch error`);
+                      break;
+                    } else if (cachedEmails.length > 0) {
+                      console.log("Using cached emails due to batch retrieval failure");
+                      return cachedEmails;
+                    }
+                    
+                    // Otherwise, propagate the error to try a full fallback
+                    throw batchError;
+                  }
+                }
+                
+                // Cache the complete result
+                if (allEmails.length > 0) {
+                  try {
+                    localStorage.setItem('cached_outlook_emails', JSON.stringify(allEmails));
+                    console.log(`Cached all ${allEmails.length} emails successfully`);
+                  } catch (cacheError) {
+                    console.error("Error caching complete emails:", cacheError);
+                  }
+                }
+                
+                return allEmails;
+              };
+              
+              // Race between email retrieval and timeout
+              const outlookEmails = await Promise.race([getBatchedEmails(), timeoutPromise]);
+              
+              if (outlookEmails.length === 0 && cachedEmails.length > 0) {
+                console.log("Retrieved empty result, using cached emails");
+                return cachedEmails;
               }
+              
+              console.log("Successfully retrieved emails from Outlook:", outlookEmails.length);
+              return outlookEmails;
+            } catch (error) {
+              console.error(`Outlook connection error (attempt ${attempt}/${maxAttempts}):`, error);
+              
+              // Try to get cached Outlook emails first
+              try {
+                const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+                if (cachedEmails.length > 0) {
+                  console.log(`Using ${cachedEmails.length} cached Outlook emails due to retrieval error`);
+                  
+                  // Show cached notification
+                  const { toast } = await import("@/hooks/use-toast");
+                  toast({
+                    title: "Using Cached Emails",
+                    description: `Using ${cachedEmails.length} previously cached emails while reconnecting to Outlook.`,
+                    variant: "warning",
+                  });
+                  
+                  return cachedEmails;
+                }
+              } catch (cacheError) {
+                console.error("Error getting cached emails:", cacheError);
+              }
+              
+              // If we have retries left, try again with backoff
+              if (attempt < maxAttempts) {
+                const backoffMs = Math.min(1000 * Math.pow(2, attempt), 5000);
+                console.log(`Retrying in ${backoffMs}ms...`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+                return fetchWithRetry(attempt + 1, maxAttempts);
+              }
+              
+              // If all retries fail, throw the error to fall back to mock data
+              throw error;
             }
-            
-            return allEmails;
           };
           
-          // Try batched retrieval with timeout protection
-          const outlookEmailsPromise = getBatchedEmails();
-          
-          // Race between email retrieval and timeout
-          const outlookEmails = await Promise.race([outlookEmailsPromise, timeoutPromise]);
+          const outlookEmails = await fetchWithRetry();
           
           console.log("Received emails from Outlook:", outlookEmails.length);
           
@@ -260,7 +351,7 @@ export const emailService = {
           
           return outlookEmails;
         } catch (error) {
-          console.error("Outlook connection error:", error);
+          console.error("All Outlook connection attempts failed:", error);
           
           // Show error notification
           const { toast } = await import("@/hooks/use-toast");
@@ -270,11 +361,11 @@ export const emailService = {
             variant: "destructive",
           });
           
-          // Try to get cached Outlook emails
+          // Try to get cached Outlook emails one more time
           try {
             const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
             if (cachedEmails.length > 0) {
-              console.log(`Using ${cachedEmails.length} cached Outlook emails`);
+              console.log(`Using ${cachedEmails.length} cached Outlook emails as final fallback`);
               return cachedEmails;
             }
           } catch (cacheError) {
