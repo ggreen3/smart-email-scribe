@@ -1,3 +1,4 @@
+
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
 import { aiWebSocketService } from "./aiWebSocketService";
@@ -314,7 +315,7 @@ export const emailService = {
                   toast({
                     title: "Using Cached Emails",
                     description: `Using ${cachedEmails.length} previously cached emails while reconnecting to Outlook.`,
-                    variant: "warning",
+                    variant: "default",
                   });
                   
                   return cachedEmails;
