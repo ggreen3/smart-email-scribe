@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import EmailSidebar from "@/components/EmailSidebar";
 import EmailList from "@/components/EmailList";
@@ -13,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
@@ -33,6 +33,10 @@ const EmailApp = () => {
     };
     subject: string;
   } | undefined>(undefined);
+
+  const [emailLoadingProgress, setEmailLoadingProgress] = useState<string | null>(null);
+  const [emailLoadingError, setEmailLoadingError] = useState<string | null>(null);
+  const [forceOutlookConnect, setForceOutlookConnect] = useState(false);
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -40,6 +44,7 @@ const EmailApp = () => {
   // Check if Outlook is connected
   useEffect(() => {
     const checkOutlookConnection = () => {
+      console.log("Checking Outlook connection status...");
       const connected = outlookService.checkConnection();
       setIsOutlookConnected(connected);
       
@@ -51,8 +56,9 @@ const EmailApp = () => {
           description: `Your emails are syncing with Outlook (${userEmail}).`,
         });
       } else {
-        // Show connection dialog if not connected
+        // Show connection dialog if not connected or if force connect is true
         setShowConnectDialog(true);
+        console.log("Outlook not connected, showing connect dialog");
       }
     };
     
@@ -68,39 +74,64 @@ const EmailApp = () => {
     return () => {
       window.removeEventListener('outlookConnectionChanged', handleOutlookConnectionChanged as EventListener);
     };
-  }, []);
+  }, [forceOutlookConnect]);
 
   // Fetch emails on component mount
   useEffect(() => {
-    fetchEmails();
+    if (isOutlookConnected) {
+      console.log("Outlook connected, fetching emails");
+      fetchEmails();
+    }
     
     // Set an interval to refresh emails every 60 seconds
-    const refreshInterval = setInterval(fetchEmails, 60000);
+    const refreshInterval = setInterval(() => {
+      if (isOutlookConnected) {
+        fetchEmails(true); // Silent refresh
+      }
+    }, 60000);
     
     // Clear interval on component unmount
     return () => clearInterval(refreshInterval);
   }, [isOutlookConnected]);
 
-  const fetchEmails = async () => {
+  const fetchEmails = async (silent = false) => {
     try {
       setLoading(true);
-      toast({
-        title: "Syncing Emails",
-        description: "Retrieving your emails...",
-      });
+      setEmailLoadingError(null);
       
+      if (!silent) {
+        setEmailLoadingProgress("Starting to fetch emails...");
+        toast({
+          title: "Syncing Emails",
+          description: "Retrieving your emails...",
+        });
+      }
+      
+      // Set a timeout to prevent hanging
+      const timeoutId = setTimeout(() => {
+        setEmailLoadingProgress("Taking longer than expected... please wait");
+      }, 5000);
+      
+      setEmailLoadingProgress("Connecting to Outlook service...");
       const data = await emailService.getEmails();
+      clearTimeout(timeoutId);
+      
       setEmails(data);
+      setEmailLoadingProgress(null);
       
       // Dispatch a custom event to notify other components about the email update
       window.dispatchEvent(new CustomEvent('emailsUpdated'));
       
-      toast({
-        title: "Emails Synced",
-        description: `Retrieved ${data.length} emails.`,
-      });
+      if (!silent) {
+        toast({
+          title: "Emails Synced",
+          description: `Retrieved ${data.length} emails.`,
+        });
+      }
     } catch (error) {
       console.error("Error fetching emails:", error);
+      setEmailLoadingError(`Failed to load emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
       toast({
         title: "Error ❌",
         description: "Failed to load emails. Please try again.",
@@ -121,8 +152,10 @@ const EmailApp = () => {
         description: "Fetching your latest emails...",
       });
       
+      setEmailLoadingProgress("Refreshing emails from Outlook...");
       const data = await emailService.getEmails();
       setEmails(data);
+      setEmailLoadingProgress(null);
       
       // Dispatch a custom event to notify other components about the email update
       window.dispatchEvent(new CustomEvent('emailsUpdated'));
@@ -133,6 +166,8 @@ const EmailApp = () => {
       });
     } catch (error) {
       console.error("Error refreshing emails:", error);
+      setEmailLoadingError(`Failed to refresh emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
       toast({
         title: "Refresh Failed",
         description: "Failed to refresh emails. Please try again.",
@@ -269,8 +304,10 @@ const EmailApp = () => {
     }
     
     setConnectingOutlook(true);
+    setEmailLoadingError(null);
     
     try {
+      console.log("Attempting to connect to Outlook with email:", outlookEmail);
       const success = await outlookService.connect(outlookEmail);
       
       if (success) {
@@ -292,16 +329,27 @@ const EmailApp = () => {
         aiWebSocketService.setCustomSystemPrompt(
           "You are an AI assistant for email management. You now have access to the user's Outlook emails and can help organize, summarize, draft responses, and provide insights based on the full email context."
         );
+        
+        // Make sure AI is connected
+        if (!aiWebSocketService.isWebSocketConnected()) {
+          console.log("AI service disconnected, attempting to reconnect after Outlook setup");
+          aiWebSocketService.reconnect();
+        }
       } else {
         throw new Error("Failed to connect to Outlook");
       }
     } catch (error) {
       console.error("Error connecting to Outlook:", error);
+      setEmailLoadingError(`Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
       toast({
         title: "Connection Failed ❌",
         description: "Failed to connect to Outlook. Please try again.",
         variant: "destructive",
       });
+      
+      // Force a reconnection attempt
+      setForceOutlookConnect(prev => !prev);
     } finally {
       setConnectingOutlook(false);
     }
@@ -312,13 +360,42 @@ const EmailApp = () => {
       <EmailSidebar />
       
       <div className="flex flex-1 overflow-hidden">
-        <EmailList 
-          emails={emails}
-          selectedEmail={selectedEmailId}
-          onSelectEmail={handleSelectEmail}
-          loading={loading}
-          onRefresh={handleRefresh}
-        />
+        {/* Email list with loading states */}
+        {loading && !selectedEmailId ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center p-6 max-w-md">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2">Loading your emails...</h3>
+              {emailLoadingProgress && (
+                <p className="text-sm text-gray-600 mb-2">{emailLoadingProgress}</p>
+              )}
+              {emailLoadingError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-600">{emailLoadingError}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2" 
+                    onClick={() => {
+                      setEmailLoadingError(null);
+                      handleRefresh();
+                    }}
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <EmailList 
+            emails={emails}
+            selectedEmail={selectedEmailId}
+            onSelectEmail={handleSelectEmail}
+            loading={loading}
+            onRefresh={handleRefresh}
+          />
+        )}
         
         <EmailView 
           email={selectedEmail}
@@ -348,7 +425,7 @@ const EmailApp = () => {
         </button>
       </div>
       
-      {/* Outlook Connect Dialog */}
+      {/* Outlook Connect Dialog with improved error handling */}
       <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -367,6 +444,11 @@ const EmailApp = () => {
                 onChange={(e) => setOutlookEmail(e.target.value)}
               />
             </div>
+            {emailLoadingError && (
+              <div className="col-span-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-600">{emailLoadingError}</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -374,7 +456,14 @@ const EmailApp = () => {
               disabled={connectingOutlook}
               className="w-full"
             >
-              {connectingOutlook ? 'Connecting...' : 'Connect to Outlook'}
+              {connectingOutlook ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                'Connect to Outlook'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

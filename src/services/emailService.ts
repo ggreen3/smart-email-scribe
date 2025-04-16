@@ -1,4 +1,3 @@
-
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
 import { aiWebSocketService } from "./aiWebSocketService";
@@ -205,11 +204,45 @@ export const emailService = {
           
           // Set a timeout for the email retrieval to prevent hanging
           const timeoutPromise = new Promise<EmailPreview[]>((_, reject) => {
-            setTimeout(() => reject(new Error("Email retrieval timed out")), 15000);
+            setTimeout(() => reject(new Error("Email retrieval timed out after 20 seconds")), 20000);
           });
           
-          // Get emails with pagination to prevent memory issues
-          const outlookEmailsPromise = outlookService.getEmails();
+          // Implement batched retrieval to prevent memory issues
+          const getBatchedEmails = async () => {
+            console.log("Using batched email retrieval from Outlook");
+            
+            // First try to get count before full retrieval
+            const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '600');
+            console.log(`Expected email count: ${emailCount}`);
+            
+            // Adjust batch size based on expected email count
+            const batchSize = emailCount > 300 ? 150 : 300;
+            let allEmails: EmailPreview[] = [];
+            
+            // Get emails in batches
+            for (let offset = 0; offset < emailCount; offset += batchSize) {
+              try {
+                console.log(`Getting batch ${offset}-${offset + batchSize} of ${emailCount} emails`);
+                const batchEmails = await outlookService.getEmailsBatch(offset, batchSize);
+                if (batchEmails.length > 0) {
+                  allEmails = [...allEmails, ...batchEmails];
+                  console.log(`Retrieved ${allEmails.length} of ${emailCount} emails so far`);
+                } else {
+                  // If batch is empty, we've reached the end
+                  break;
+                }
+              } catch (error) {
+                console.error(`Error getting batch ${offset}-${offset + batchSize}:`, error);
+                // Continue with what we have so far
+                break;
+              }
+            }
+            
+            return allEmails;
+          };
+          
+          // Try batched retrieval with timeout protection
+          const outlookEmailsPromise = getBatchedEmails();
           
           // Race between email retrieval and timeout
           const outlookEmails = await Promise.race([outlookEmailsPromise, timeoutPromise]);
@@ -237,7 +270,18 @@ export const emailService = {
             variant: "destructive",
           });
           
-          // Fall back to mock data if Outlook fails
+          // Try to get cached Outlook emails
+          try {
+            const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+            if (cachedEmails.length > 0) {
+              console.log(`Using ${cachedEmails.length} cached Outlook emails`);
+              return cachedEmails;
+            }
+          } catch (cacheError) {
+            console.error("Error getting cached emails:", cacheError);
+          }
+          
+          // Fall back to mock data if Outlook fails and no cache
         }
       }
       

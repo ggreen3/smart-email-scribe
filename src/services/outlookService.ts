@@ -1,4 +1,3 @@
-
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { useToast } from "@/hooks/use-toast";
 
@@ -292,6 +291,262 @@ export const outlookService = {
     
     // Store the count for future reference
     localStorage.setItem('outlook_email_count', dynamicEmails.length.toString());
+    
+    // Notify the UI to update
+    window.dispatchEvent(new CustomEvent('emailsUpdated'));
+    
+    return dynamicEmails;
+  },
+  
+  // Get emails in batches to prevent memory issues and timeouts
+  getEmailsBatch: async (offset: number = 0, limit: number = 100): Promise<EmailPreview[]> => {
+    if (!outlookService.checkConnection()) {
+      console.error('Not connected to Outlook');
+      throw new Error('Not connected to Outlook');
+    }
+    
+    // In a real implementation, this would call Microsoft Graph API with pagination
+    await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
+    
+    // Get actual email count from localStorage or default to a random large number
+    const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '600');
+    console.log(`Retrieving batch ${offset}-${offset+limit} of ${emailCount} emails from Outlook`);
+    
+    // Generate dynamic emails for this batch
+    const dynamicEmails: EmailPreview[] = [];
+    
+    // Add predefined emails first if we're at the first batch
+    if (offset === 0) {
+      const outlookEmails = [
+        {
+          id: "o1",
+          subject: "Weekly Team Sync - Action Items 📝",
+          sender: {
+            name: "Jennifer Parker",
+            email: "jennifer.parker@contoso.com",
+            avatar: "https://i.pravatar.cc/150?img=32",
+          },
+          preview: "Hi team, Please see the action items from our weekly sync. We need to follow up on the...",
+          time: "10:23 AM",
+          date: "Today",
+          read: false,
+          isStarred: true,
+          hasAttachments: true,
+          labels: ["Work", "Important"],
+        },
+        {
+          id: "o2",
+          subject: "Microsoft 365 License Renewal 🔑",
+          sender: {
+            name: "Microsoft Account Team",
+            email: "account@microsoft.com",
+            avatar: "https://i.pravatar.cc/150?img=33",
+          },
+          preview: "Your Microsoft 365 subscription is up for renewal. Take action now to ensure continued...",
+          time: "Yesterday",
+          date: "Apr 8",
+          read: true,
+          isStarred: true,
+          hasAttachments: false,
+          labels: ["Important"],
+        },
+        {
+          id: "o3",
+          subject: "Project Odyssey - Status Update 🚀",
+          sender: {
+            name: "David Liu",
+            email: "david.liu@contoso.com",
+            avatar: "https://i.pravatar.cc/150?img=51",
+          },
+          preview: "Team, I'm pleased to share that we've reached the milestone for Phase 2 of Project Odyssey...",
+          time: "Apr 7",
+          date: "Apr 7",
+          read: true,
+          isStarred: false,
+          hasAttachments: true,
+          labels: ["Work", "Project"],
+        },
+        {
+          id: "o4",
+          subject: "Team Building Event - RSVP Required 🎉",
+          sender: {
+            name: "HR Department",
+            email: "hr@contoso.com",
+            avatar: "https://i.pravatar.cc/150?img=41",
+          },
+          preview: "We're excited to announce our quarterly team building event! Please RSVP by Friday...",
+          time: "Apr 6",
+          date: "Apr 6",
+          read: false,
+          isStarred: false,
+          hasAttachments: true,
+          labels: ["Work", "Social"],
+        },
+        {
+          id: "o5",
+          subject: "Quarterly Financial Report - Confidential 📊",
+          sender: {
+            name: "Finance Team",
+            email: "finance@contoso.com",
+            avatar: "https://i.pravatar.cc/150?img=61",
+          },
+          preview: "Please find attached the quarterly financial report. This information is confidential...",
+          time: "Apr 5",
+          date: "Apr 5",
+          read: true,
+          isStarred: true,
+          hasAttachments: true,
+          labels: ["Work", "Finance", "Confidential"],
+        },
+        {
+          id: "o6",
+          subject: "New Product Launch Timeline 🚀",
+          sender: {
+            name: "Marketing Team",
+            email: "marketing@contoso.com",
+            avatar: "https://i.pravatar.cc/150?img=22",
+          },
+          preview: "Here's the updated timeline for our upcoming product launch. Please review and provide feedback...",
+          time: "Apr 4",
+          date: "Apr 4",
+          read: true,
+          isStarred: true,
+          hasAttachments: true,
+          labels: ["Work", "Marketing"],
+        },
+        {
+          id: "o7",
+          subject: "Office 365 Tips & Tricks 💡",
+          sender: {
+            name: "IT Training",
+            email: "it.training@contoso.com",
+            avatar: "https://i.pravatar.cc/150?img=37",
+          },
+          preview: "Discover these time-saving features in Office 365 that can boost your productivity...",
+          time: "Apr 3",
+          date: "Apr 3",
+          read: false,
+          isStarred: false,
+          hasAttachments: false,
+          labels: ["IT", "Training"],
+        },
+      ];
+      
+      dynamicEmails.push(...outlookEmails);
+    }
+    
+    // Calculate how many emails to generate for this batch
+    const startIndex = offset === 0 ? dynamicEmails.length : offset;
+    const endIndex = Math.min(offset + limit, emailCount);
+    const batchSize = endIndex - startIndex;
+    
+    // Generate additional emails for this batch
+    if (batchSize > 0) {
+      console.log(`Generating ${batchSize} additional dynamic emails for batch`);
+      
+      const senderDomains = ['outlook.com', 'microsoft.com', 'contoso.com', 'gmail.com', 'example.com'];
+      const senderNames = ['Alex Johnson', 'Maria Garcia', 'Wei Chen', 'Aisha Patel', 'Carlos Rodriguez', 'Emma Wilson', 'James Smith', 'Sophia Lee'];
+      const subjectPrefixes = ['RE: ', 'FWD: ', '', 'Update: ', 'Invitation: ', 'Action Required: ', 'Reminder: '];
+      const subjectTopics = ['Project Update', 'Meeting Notes', 'Quarterly Report', 'Team Building', 'Invoice', 'Contract Review', 'Weekly Summary', 'Performance Review'];
+      const labelOptions = ['Work', 'Important', 'Personal', 'Finance', 'Travel', 'Shopping', 'Social', 'Project'];
+      
+      // Different time formats for variety
+      const timeOptions = [
+        { recent: ['Just now', '5 min ago', '10 min ago', '30 min ago', '1 hour ago'] },
+        { today: ['8:30 AM', '9:45 AM', '11:15 AM', '1:30 PM', '3:20 PM', '4:55 PM', '5:30 PM'] },
+        { yesterday: ['Yesterday'] },
+        { lastWeek: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+        { earlier: ['Apr 1', 'Apr 2', 'Apr 3', 'Mar 28', 'Mar 25', 'Mar 20', 'Mar 15', 'Mar 10'] }
+      ];
+      
+      // Add the generated emails for this batch
+      for (let i = 0; i < batchSize; i++) {
+        // Use the same generation logic as before but start from the correct index
+        const currentIndex = startIndex + i;
+        
+        // Generate random attributes for each email
+        const randomSenderName = senderNames[Math.floor(Math.random() * senderNames.length)];
+        const randomDomain = senderDomains[Math.floor(Math.random() * senderDomains.length)];
+        const randomSubjectPrefix = subjectPrefixes[Math.floor(Math.random() * subjectPrefixes.length)];
+        const randomSubjectTopic = subjectTopics[Math.floor(Math.random() * subjectTopics.length)];
+        
+        // Randomly select time period and specific time
+        const timePeriodsArray = Object.keys(timeOptions);
+        const randomTimePeriodKey = timePeriodsArray[Math.floor(Math.random() * timePeriodsArray.length)];
+        const randomTimePeriod = timeOptions[randomTimePeriodKey as keyof typeof timeOptions];
+        const timeArray = Object.values(randomTimePeriod)[0];
+        const randomTime = timeArray[Math.floor(Math.random() * timeArray.length)];
+        
+        // Generate a date based on the time period
+        let emailDate;
+        if (randomTimePeriodKey === 'recent' || randomTimePeriodKey === 'today') {
+          emailDate = 'Today';
+        } else if (randomTimePeriodKey === 'yesterday') {
+          emailDate = 'Yesterday';
+        } else if (randomTimePeriodKey === 'lastWeek') {
+          emailDate = randomTime;
+        } else {
+          emailDate = randomTime;
+        }
+        
+        // Generate random labels (0-2 labels)
+        const labelCount = Math.floor(Math.random() * 3);
+        const emailLabels = [];
+        for (let j = 0; j < labelCount; j++) {
+          const randomLabel = labelOptions[Math.floor(Math.random() * labelOptions.length)];
+          if (!emailLabels.includes(randomLabel)) {
+            emailLabels.push(randomLabel);
+          }
+        }
+        
+        dynamicEmails.push({
+          id: `o${currentIndex}`,
+          subject: `${randomSubjectPrefix}${randomSubjectTopic} ${Math.random() > 0.8 ? '📌' : ''}`,
+          sender: {
+            name: randomSenderName,
+            email: `${randomSenderName.toLowerCase().replace(' ', '.')}@${randomDomain}`,
+            avatar: `https://i.pravatar.cc/150?img=${20 + currentIndex % 70}`,
+          },
+          preview: `This is email #${currentIndex} from your Outlook account...`,
+          time: randomTimePeriodKey === 'recent' || randomTimePeriodKey === 'today' ? randomTime : '9:00 AM',
+          date: emailDate,
+          read: Math.random() > 0.3, // 70% chance of being read
+          isStarred: Math.random() > 0.8, // 20% chance of being starred
+          hasAttachments: Math.random() > 0.7, // 30% chance of having attachments
+          labels: emailLabels,
+        });
+      }
+    }
+    
+    // Cache this batch in localStorage for future use
+    try {
+      // Get existing cached emails
+      const existingCache = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+      
+      // Determine which emails to add (avoid duplicates by ID)
+      const existingIds = new Set(existingCache.map((email: EmailPreview) => email.id));
+      const newEmails = dynamicEmails.filter(email => !existingIds.has(email.id));
+      
+      // Combine existing cache with new emails
+      const updatedCache = [...existingCache, ...newEmails];
+      
+      // Only keep most recent emails if cache gets too large
+      const maxCacheSize = 1000;
+      const trimmedCache = updatedCache.length > maxCacheSize 
+        ? updatedCache.slice(updatedCache.length - maxCacheSize) 
+        : updatedCache;
+      
+      // Save back to localStorage
+      localStorage.setItem('cached_outlook_emails', JSON.stringify(trimmedCache));
+      console.log(`Updated Outlook email cache with ${newEmails.length} new emails, total: ${trimmedCache.length}`);
+    } catch (error) {
+      console.error('Error caching Outlook emails:', error);
+    }
+    
+    console.log(`Returning ${dynamicEmails.length} Outlook emails for batch ${offset}-${offset+limit}`);
+    
+    // Store the count for future reference
+    localStorage.setItem('outlook_email_count', emailCount.toString());
     
     // Notify the UI to update
     window.dispatchEvent(new CustomEvent('emailsUpdated'));

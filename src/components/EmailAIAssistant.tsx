@@ -20,10 +20,20 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
+    // Check initial connection status
+    const initialStatus = aiWebSocketService.isWebSocketConnected();
+    setIsConnected(initialStatus);
+    
+    if (!initialStatus) {
+      console.log("AI service disconnected on mount, attempting to reconnect...");
+      aiWebSocketService.reconnect();
+    }
+
     const handleMessage = (message: AIMessage) => {
       if (message.role === 'assistant') {
         setAnalysis(message.content);
@@ -33,13 +43,22 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
     };
     
     const handleConnectionStatus = (connected: boolean) => {
+      console.log("AI connection status changed:", connected);
       setIsConnected(connected);
+      
       if (!connected) {
         toast({
           title: "AI Disconnected ❌",
           description: "Lost connection to AI service. Trying to reconnect...",
           variant: "destructive"
         });
+      } else if (reconnectAttempt > 0) {
+        // Only show reconnection success if we previously tried to reconnect
+        toast({
+          title: "AI Connected ✅",
+          description: "Successfully reconnected to AI service.",
+        });
+        setReconnectAttempt(0);
       }
     };
     
@@ -50,7 +69,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
       aiWebSocketService.removeMessageListener(handleMessage);
       aiWebSocketService.removeConnectionStatusListener(handleConnectionStatus);
     };
-  }, [toast]);
+  }, [toast, reconnectAttempt]);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -70,7 +89,7 @@ export default function EmailAIAssistant({ email, onClose }: EmailAIAssistantPro
     if (!isConnected) {
       toast({
         title: "AI Service Disconnected ❌",
-        description: "Cannot connect to AI service. Please try again later.",
+        description: "Cannot connect to AI service. Please try the reconnect button.",
         variant: "destructive",
       });
       return;
@@ -107,11 +126,26 @@ Content: ${email.body}
   };
 
   const handleReconnect = () => {
+    setReconnectAttempt(prev => prev + 1);
     toast({
       title: "Reconnecting...",
       description: "Attempting to reconnect to AI service."
     });
+    
+    // Force close and reopen the connection
     aiWebSocketService.reconnect();
+    
+    // Set a timeout to check if connection was successful
+    setTimeout(() => {
+      const newStatus = aiWebSocketService.isWebSocketConnected();
+      if (!newStatus && reconnectAttempt >= 2) {
+        toast({
+          title: "Reconnection failed",
+          description: "Still unable to connect. Please try again later or refresh the page.",
+          variant: "destructive"
+        });
+      }
+    }, 3000);
   };
 
   return (
@@ -134,7 +168,7 @@ Content: ${email.body}
                 className="h-5 w-5 p-0 ml-1" 
                 onClick={handleReconnect}
               >
-                <RefreshCw className="h-3 w-3" />
+                <RefreshCw className={`h-3 w-3 ${reconnectAttempt > 0 && !isConnected ? 'animate-spin' : ''}`} />
               </Button>
             </Badge>
           )}

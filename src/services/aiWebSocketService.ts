@@ -15,14 +15,16 @@ class AIWebSocketService {
   private connectionStatusListeners: ((connected: boolean) => void)[] = [];
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5; // Reduced from 10 to prevent excessive attempts
+  private maxReconnectAttempts: number = 10; // Increased to give more chances
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private customSystemPrompt: string = "You are an AI assistant for email management. You have access to the user's emails and can help organize, summarize, draft responses, and provide insights based on email content.";
   private pingInterval: NodeJS.Timeout | null = null;
   private webSocketUrl: string = 'wss://backend.buildpicoapps.com/api/chatbot/chat';
   private autoReconnect: boolean = true;
   private lastConnectionAttempt: number = 0;
-  private connectionCooldown: number = 5000; // 5 second cooldown between connection attempts
+  private connectionCooldown: number = 3000; // 3 second cooldown between connection attempts
+  private pingFailCount: number = 0;
+  private maxPingFailCount: number = 3;
 
   constructor() {
     console.log('Initializing AI WebSocket Service');
@@ -31,6 +33,9 @@ class AIWebSocketService {
     // Listen for online/offline events
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
+    
+    // Schedule periodic reconnection check
+    setInterval(() => this.checkConnectionStatus(), 30000);
   }
   
   private handleOnline = () => {
@@ -46,6 +51,35 @@ class AIWebSocketService {
     if (this.socket) {
       this.socket.close();
       this.socket = null;
+    }
+  }
+  
+  private checkConnectionStatus() {
+    if (!this.isConnected && this.autoReconnect) {
+      console.log('Periodic connection check: AI WebSocket disconnected, attempting to reconnect...');
+      this.reconnect();
+    } else if (this.isConnected) {
+      console.log('Periodic connection check: AI WebSocket is connected');
+      // Send a ping to verify the connection is actually working
+      this.sendPing();
+    }
+  }
+  
+  private sendPing() {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      try {
+        this.socket.send(JSON.stringify({ type: 'ping' }));
+        console.log('Ping sent to verify WebSocket connection');
+      } catch (error) {
+        console.error('Error sending verification ping:', error);
+        this.pingFailCount++;
+        
+        if (this.pingFailCount >= this.maxPingFailCount) {
+          console.log('Multiple ping failures detected, reconnecting WebSocket');
+          this.pingFailCount = 0;
+          this.reconnect();
+        }
+      }
     }
   }
 
@@ -90,6 +124,7 @@ class AIWebSocketService {
         console.log('WebSocket connection established successfully');
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        this.pingFailCount = 0;
         this.notifyConnectionStatus(true);
         
         // Send system prompt on connection
@@ -117,9 +152,18 @@ class AIWebSocketService {
               console.log('Ping sent to keep WebSocket alive');
             } catch (error) {
               console.error('Error sending ping:', error);
-              // If ping fails, attempt to reconnect
-              this.reconnect();
+              this.pingFailCount++;
+              
+              if (this.pingFailCount >= this.maxPingFailCount) {
+                console.log('Multiple ping failures detected, reconnecting WebSocket');
+                this.pingFailCount = 0;
+                this.reconnect();
+              }
             }
+          } else {
+            // Socket is not open, attempt to reconnect
+            console.log('Ping interval detected closed WebSocket, attempting to reconnect');
+            this.reconnect();
           }
         }, 30000); // Send ping every 30 seconds
       };
@@ -384,7 +428,9 @@ class AIWebSocketService {
   public reconnect() {
     console.log("Manually triggering WebSocket reconnection");
     this.reconnectAttempts = 0;
+    this.pingFailCount = 0;
     this.autoReconnect = true;
+    
     if (this.socket) {
       try {
         this.socket.close();
@@ -393,6 +439,14 @@ class AIWebSocketService {
       }
       this.socket = null;
     }
+    
+    // Clear any existing reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    // Immediate reconnection attempt
     this.connect();
   }
   
