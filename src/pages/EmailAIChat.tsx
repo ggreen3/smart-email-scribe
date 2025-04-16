@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { X, Send, Loader2, Brain, Copy, Search, Undo, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -83,8 +82,8 @@ export default function EmailAIChat() {
       if (userMessage.toLowerCase().includes('find') || userMessage.toLowerCase().includes('search')) {
         await handleSearchQuery(userMessage);
       } else {
-        // Send to WebSocket with email context
-        aiWebSocketService.sendMessageWithEmailContext(userMessage);
+        // Send to WebSocket with email context - fix the method name here
+        aiWebSocketService.sendMessage(userMessage, "Email context would be provided here in a real implementation");
       }
     } catch (error) {
       console.error('Error processing message:', error);

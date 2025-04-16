@@ -1,4 +1,3 @@
-
 import { EmailPreview, EmailDetail } from "@/types/email";
 import { outlookService } from "./outlookService";
 import { aiWebSocketService } from "./aiWebSocketService";
@@ -294,9 +293,13 @@ export const emailService = {
               // Race between email retrieval and timeout
               const outlookEmails = await Promise.race([getBatchedEmails(), timeoutPromise]);
               
-              if (outlookEmails.length === 0 && cachedEmails.length > 0) {
-                console.log("Retrieved empty result, using cached emails");
-                return cachedEmails;
+              // Here's where the error was - properly check the cached emails 
+              if (outlookEmails.length === 0) {
+                const cachedOutlookEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+                if (cachedOutlookEmails.length > 0) {
+                  console.log("Retrieved empty result, using cached emails");
+                  return cachedOutlookEmails;
+                }
               }
               
               console.log("Successfully retrieved emails from Outlook:", outlookEmails.length);

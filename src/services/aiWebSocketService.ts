@@ -1,4 +1,3 @@
-
 // This service handles WebSocket connections to the AI service
 // It maintains the connection and exposes methods to send and receive messages
 
@@ -259,6 +258,12 @@ class AIWebSocketService {
       console.error("Error sending message:", error);
       return false;
     }
+  }
+
+  // Add the sendMessageWithEmailContext method that's being referenced in EmailAIChat.tsx
+  public sendMessageWithEmailContext(content: string, emailContext: string = "") {
+    console.log("Sending message with email context:", content);
+    return this.sendMessage(content, emailContext);
   }
 
   private sendSystemPrompt() {
