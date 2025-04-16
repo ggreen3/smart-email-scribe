@@ -118,8 +118,8 @@ Date: ${email.date} at ${email.time}
 Content: ${email.body}
       `.trim();
       
-      // Send the message with context to the WebSocket service
-      aiWebSocketService.sendMessage(query, emailContext);
+      // Use the sendMessageWithEmailContext method from our WebSocket service
+      aiWebSocketService.sendMessageWithEmailContext(query, emailContext);
       
       toast({
         title: "Processing Query ✨",

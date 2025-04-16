@@ -1,3 +1,4 @@
+
 // This service handles WebSocket connections to the AI service
 // It maintains the connection and exposes methods to send and receive messages
 
@@ -17,7 +18,6 @@ class AIWebSocketService {
   private reconnectTimeout: number | null = null;
   private reconnectAttempts: number = 0;
   private pingInterval: number | null = null;
-  private lastPingTime: number = 0;
   private systemPrompt: string = "You are an AI assistant for email management in Outlook. You have access to the user's emails and can help organize, summarize, draft responses, and provide insights based on email content. You can analyze email patterns, suggest responses, and identify important emails in the user's inbox. Be concise but thorough in your responses.";
 
   constructor() {
@@ -49,8 +49,8 @@ class AIWebSocketService {
     }
 
     try {
-      // In a real app, this would be your AI service endpoint
-      const wsUrl = "wss://echo.websocket.org"; // Echo service for demo
+      // Use the provided WebSocket URL
+      const wsUrl = "wss://backend.buildpicoapps.com/api/chatbot/chat";
       console.log("Connecting to WebSocket:", wsUrl);
       
       this.webSocket = new WebSocket(wsUrl);
@@ -70,34 +70,29 @@ class AIWebSocketService {
         console.log("WebSocket message received:", event.data);
         
         try {
-          // Handle ping/pong for connection verification
-          if (event.data === "pong") {
-            console.log("Received pong response, connection verified");
-            this.lastPingTime = Date.now();
-            return;
-          }
+          // Parse the message data
+          const data = JSON.parse(event.data);
           
-          // Handle normal messages
-          const message = JSON.parse(event.data);
+          // Create an AIMessage from the response
+          const message: AIMessage = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.message || data.content || event.data,
+          };
           
-          // Echo service will just return what we sent, so in a real implementation 
-          // you would transform the response here
-          if (message.role === 'user') {
-            // For demo: Echo service returns what we send, so we simulate AI response
-            setTimeout(() => {
-              this.simulateAIResponse(message.content);
-            }, 1000);
-          } else {
-            this.notifyMessage(message);
-          }
+          // Notify listeners of the new message
+          this.notifyMessage(message);
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
           
-          // For demo: If message isn't JSON, simulate response based on text
+          // If parsing fails, try to use the raw message
           if (typeof event.data === 'string') {
-            setTimeout(() => {
-              this.simulateAIResponse(event.data);
-            }, 1000);
+            const message: AIMessage = {
+              id: uuidv4(),
+              role: 'assistant',
+              content: event.data,
+            };
+            this.notifyMessage(message);
           }
         }
       };
@@ -139,9 +134,6 @@ class AIWebSocketService {
     this.pingInterval = window.setInterval(() => {
       this.sendPing();
     }, 30000);
-    
-    // Initial ping to verify connection immediately
-    this.sendPing();
   }
   
   private stopPingInterval() {
@@ -154,9 +146,8 @@ class AIWebSocketService {
   private sendPing() {
     if (this.isWebSocketConnected()) {
       try {
-        this.webSocket?.send("ping");
+        this.webSocket?.send(JSON.stringify({ type: "ping" }));
         console.log("Ping sent to verify connection");
-        this.lastPingTime = Date.now();
       } catch (error) {
         console.error("Error sending ping:", error);
         this.notifyConnectionStatus(false);
@@ -242,13 +233,15 @@ class AIWebSocketService {
         content: content,
       };
       
-      // Add context if provided
-      const messageWithContext = context 
-        ? { ...message, content: `${content}\n\nCONTEXT:\n${context}` } 
-        : message;
+      // Create the WebSocket payload to send
+      const payload = {
+        message: content,
+        context: context || undefined
+      };
       
-      this.webSocket?.send(JSON.stringify(messageWithContext));
-      console.log("Message sent to AI service:", messageWithContext);
+      // Send the message
+      this.webSocket?.send(JSON.stringify(payload));
+      console.log("Message sent to AI service:", payload);
       
       // Notify local listeners of the user message
       this.notifyMessage(message);
@@ -260,7 +253,7 @@ class AIWebSocketService {
     }
   }
 
-  // Add the sendMessageWithEmailContext method that's being referenced in EmailAIChat.tsx
+  // Implementation of the sendMessageWithEmailContext method
   public sendMessageWithEmailContext(content: string, emailContext: string = "") {
     console.log("Sending message with email context:", content);
     return this.sendMessage(content, emailContext);
@@ -274,8 +267,8 @@ class AIWebSocketService {
     
     try {
       const systemMessage = {
-        role: 'system',
-        content: this.systemPrompt,
+        type: "system",
+        message: this.systemPrompt,
       };
       
       this.webSocket?.send(JSON.stringify(systemMessage));
@@ -325,32 +318,6 @@ class AIWebSocketService {
     
     this.connectionListeners = [];
     this.messageListeners = [];
-  }
-
-  // For demo purposes only - simulates AI responses in echo service
-  private simulateAIResponse(userContent: string) {
-    const assistantResponse: AIMessage = {
-      id: uuidv4(),
-      role: 'assistant',
-      content: this.generateMockResponse(userContent),
-    };
-    
-    this.notifyMessage(assistantResponse);
-  }
-  
-  // Generate a mock response based on user input for demo
-  private generateMockResponse(userContent: string): string {
-    if (userContent.toLowerCase().includes("summarize")) {
-      return "Here's a summary of the email:\n\n• The sender is discussing a project update\n• They've completed the initial phase\n• There are action items that need to be addressed\n• They've attached relevant documents for review";
-    } else if (userContent.toLowerCase().includes("draft")) {
-      return "Here's a draft response:\n\nThank you for your email. I have received the documents and will review them promptly. I'll get back to you with my feedback by the end of the week.\n\nBest regards,\n[Your Name]";
-    } else if (userContent.toLowerCase().includes("analyze")) {
-      return "Email Analysis:\n\nThis appears to be a work-related email with medium priority. The sender expects a response or acknowledgment. The tone is professional and direct. There are 2 action items mentioned that require your attention within the next 48 hours.";
-    } else if (userContent.toLowerCase().includes("important")) {
-      return "Based on the content, this email is important as it contains:\n\n1. Time-sensitive information about a deadline\n2. Requests for your input on key decisions\n3. Information needed for an upcoming meeting";
-    } else {
-      return "I've analyzed the email you shared. It appears to be about a business matter that requires your attention. Would you like me to summarize the key points, draft a response, or analyze the tone and urgency of this message?";
-    }
   }
 }
 

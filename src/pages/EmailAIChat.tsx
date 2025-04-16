@@ -82,8 +82,8 @@ export default function EmailAIChat() {
       if (userMessage.toLowerCase().includes('find') || userMessage.toLowerCase().includes('search')) {
         await handleSearchQuery(userMessage);
       } else {
-        // Send to WebSocket with email context - fix the method name here
-        aiWebSocketService.sendMessage(userMessage, "Email context would be provided here in a real implementation");
+        // Send message through WebSocket service with email context
+        aiWebSocketService.sendMessageWithEmailContext(userMessage, "Email context would be provided here in a real implementation");
       }
     } catch (error) {
       console.error('Error processing message:', error);
