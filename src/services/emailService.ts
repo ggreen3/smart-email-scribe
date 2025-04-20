@@ -216,11 +216,11 @@ export const emailService = {
                 console.log("Using enhanced batched email retrieval from Outlook with longer timeout");
                 
                 // Get expected email count with a smaller default to improve reliability
-                const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '300');
+                const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '100');
                 console.log(`Expected email count: ${emailCount}`);
                 
                 // Use smaller batch size for more reliability
-                const batchSize = 50;
+                const batchSize = 25; // Reduced from 50
                 let allEmails: EmailPreview[] = [];
                 
                 // Get cached emails first as a fallback
@@ -232,8 +232,8 @@ export const emailService = {
                   console.error("Error parsing cached emails:", e);
                 }
                 
-                // Only try to fetch first 200 emails to ensure we get some results
-                const maxEmailsToFetch = Math.min(emailCount, 200);
+                // Only try to fetch first 100 emails to ensure we get some results
+                const maxEmailsToFetch = Math.min(emailCount, 100); // Reduced from 200
                 
                 // Get emails in smaller batches with progressive timeouts
                 for (let offset = 0; offset < maxEmailsToFetch; offset += batchSize) {
@@ -248,7 +248,13 @@ export const emailService = {
                     const batchEmails = await Promise.race([batchPromise, batchTimeoutPromise]);
                     
                     if (batchEmails && batchEmails.length > 0) {
-                      allEmails = [...allEmails, ...batchEmails];
+                      // Mark these as Outlook emails
+                      const markedEmails = batchEmails.map(email => ({
+                        ...email,
+                        isOutlookEmail: true
+                      }));
+                      
+                      allEmails = [...allEmails, ...markedEmails];
                       console.log(`Retrieved ${allEmails.length} of ${maxEmailsToFetch} emails so far`);
                       
                       // Save partial results to cache in case of later failure
@@ -260,7 +266,7 @@ export const emailService = {
                       }
                       
                       // If we have at least some emails, we can return early
-                      if (allEmails.length >= 50) {
+                      if (allEmails.length >= 25) { // Reduced from 50
                         console.log("Retrieved sufficient emails for initial display");
                         return allEmails;
                       }
@@ -380,6 +386,7 @@ export const emailService = {
           // Update global email counter for the UI
           window.dispatchEvent(new CustomEvent('emailsUpdated'));
           
+          // Return only Outlook emails - no fallback to mock emails
           return outlookEmails;
         } catch (error) {
           console.error("All Outlook connection attempts failed:", error);
@@ -407,7 +414,7 @@ export const emailService = {
         }
       }
       
-      // Use mock data if not using Outlook or if Outlook fails
+      // Use mock data only if not using Outlook or if Outlook fails
       await delay(800);
       return mockEmails.map(email => ({
         id: email.id,
@@ -420,6 +427,7 @@ export const emailService = {
         isStarred: email.isStarred,
         hasAttachments: email.hasAttachments,
         labels: email.labels,
+        isOutlookEmail: false  // Mark mock emails explicitly
       }));
     } catch (error) {
       console.error("Fatal error in getEmails:", error);

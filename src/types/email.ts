@@ -15,6 +15,7 @@ export interface EmailPreview {
   isStarred: boolean;
   hasAttachments: boolean;
   labels?: string[];
+  isOutlookEmail?: boolean;  // Flag to identify Outlook emails
 }
 
 // Types for detailed email view

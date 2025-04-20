@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 
 const EmailApp = () => {
   const [emails, setEmails] = useState<EmailPreview[]>([]);
@@ -58,7 +58,7 @@ const EmailApp = () => {
         
         // Ensure we have a reasonable email count set
         if (!localStorage.getItem('outlook_email_count')) {
-          localStorage.setItem('outlook_email_count', '200');
+          localStorage.setItem('outlook_email_count', '100'); // Reduced from 200 to improve reliability
         }
       } else {
         // Show connection dialog if not connected or if force connect is true
@@ -85,6 +85,10 @@ const EmailApp = () => {
   useEffect(() => {
     if (isOutlookConnected) {
       console.log("Outlook connected, fetching emails");
+      
+      // Force a clean state when fetching fresh emails from Outlook
+      setEmails([]);
+      setLoading(true);
       fetchEmails();
       
       // Check for cached emails first while waiting for fetch
@@ -137,7 +141,19 @@ const EmailApp = () => {
       
       // Only update emails if we got a non-empty result
       if (data && data.length > 0) {
-        setEmails(data);
+        // Filter out mock emails if we have Outlook emails
+        const outlookEmails = data.filter(email => email.isOutlookEmail === true);
+        
+        if (outlookEmails.length > 0) {
+          // If we have Outlook emails, only use those
+          console.log(`Using ${outlookEmails.length} Outlook emails, ignoring mock emails`);
+          setEmails(outlookEmails);
+        } else {
+          // Otherwise use all emails (which may include mock ones)
+          console.log(`Using all ${data.length} emails (no Outlook emails detected)`);
+          setEmails(data);
+        }
+        
         setEmailLoadingProgress(null);
         
         // Dispatch a custom event to notify other components about the email update
@@ -146,7 +162,7 @@ const EmailApp = () => {
         if (!silent) {
           toast({
             title: "Emails Synced",
-            description: `Retrieved ${data.length} emails.`,
+            description: `Retrieved ${outlookEmails.length > 0 ? outlookEmails.length : data.length} emails.`,
           });
         }
       } else if (data && data.length === 0) {
@@ -380,10 +396,13 @@ const EmailApp = () => {
         });
         
         // Set a more reasonable number of emails to load
-        localStorage.setItem('outlook_email_count', '200');
+        localStorage.setItem('outlook_email_count', '100'); // Reduced from 200
         
         setIsOutlookConnected(true);
         setShowConnectDialog(false);
+        
+        // Force a clean state
+        setEmails([]);
         
         // First check for cached emails to display immediately
         try {
@@ -477,6 +496,19 @@ const EmailApp = () => {
           onBack={handleBackToList}
           onReply={handleReply}
         />
+      </div>
+      
+      {/* Manual refresh button (floating) */}
+      <div className="fixed bottom-20 right-4 z-10">
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-white rounded-full w-12 h-12 shadow-lg"
+          onClick={() => handleRefresh()}
+          disabled={refreshing}
+        >
+          <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
       
       {composeOpen && (
