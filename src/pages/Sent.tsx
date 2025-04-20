@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Send, Paperclip, Star, Archive, Trash2, Loader2, Brain } from "lucide-react";
+import { Send, Paperclip, Star, Archive, Trash2, Loader2, Brain, RefreshCw } from "lucide-react";
 import EmailSidebar from "@/components/EmailSidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -13,11 +13,17 @@ import { useToast } from "@/hooks/use-toast";
 import { EmailPreview } from "@/types/email";
 import { Textarea } from "@/components/ui/textarea";
 import { aiWebSocketService, AIMessage } from "@/services/aiWebSocketService";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Sent() {
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [emails, setEmails] = useState<EmailPreview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
   const [showAIChat, setShowAIChat] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [chatMessages, setChatMessages] = useState<AIMessage[]>([
@@ -52,33 +58,6 @@ export default function Sent() {
     aiWebSocketService.addMessageListener(handleMessage);
     
     // Fetch sent emails
-    const fetchSentEmails = async () => {
-      try {
-        setLoading(true);
-        toast({
-          title: "Loading Sent Emails",
-          description: "Retrieving your sent emails...",
-        });
-        
-        const data = await emailService.getSentEmails();
-        setEmails(data);
-        
-        toast({
-          title: "Emails Loaded",
-          description: `Retrieved ${data.length} sent emails.`,
-        });
-      } catch (error) {
-        console.error("Error fetching sent emails:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load sent emails. Please try again.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     fetchSentEmails();
     
     // Cleanup listeners
@@ -87,6 +66,144 @@ export default function Sent() {
       aiWebSocketService.removeMessageListener(handleMessage);
     };
   }, []);
+
+  const fetchSentEmails = async (silent = false) => {
+    try {
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setFetchError(null);
+      
+      if (!silent) {
+        toast({
+          title: "Loading Sent Emails",
+          description: "Retrieving your sent emails...",
+        });
+      }
+      
+      // Setup a timeout to handle slow connections
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Email retrieval timed out after 30 seconds")), 30000);
+      });
+      
+      // Get cached sent emails first for immediate display
+      try {
+        const cachedEmails = JSON.parse(localStorage.getItem('cached_sent_emails') || '[]');
+        if (cachedEmails.length > 0 && !silent) {
+          console.log(`Using ${cachedEmails.length} cached sent emails for immediate display`);
+          setEmails(cachedEmails);
+          setLoading(false);
+          setLastRefreshTime(`Last updated: ${new Date().toLocaleTimeString()}`);
+        }
+      } catch (error) {
+        console.error("Error loading cached sent emails:", error);
+      }
+      
+      // Fetch with retry logic
+      const fetchWithRetry = async (attempt = 1, maxAttempts = 3): Promise<EmailPreview[]> => {
+        try {
+          console.log(`Fetching sent emails, attempt ${attempt} of ${maxAttempts}`);
+          const data = await emailService.getSentEmails();
+          
+          if (data.length > 0) {
+            // Cache the results
+            try {
+              localStorage.setItem('cached_sent_emails', JSON.stringify(data));
+              console.log(`Cached ${data.length} sent emails successfully`);
+            } catch (cacheError) {
+              console.error("Error caching sent emails:", cacheError);
+            }
+            
+            return data;
+          } else if (attempt < maxAttempts) {
+            // If empty result but we have retries left
+            console.log(`Empty result on attempt ${attempt}, retrying...`);
+            const backoff = Math.min(1000 * Math.pow(2, attempt), 5000);
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            return fetchWithRetry(attempt + 1, maxAttempts);
+          } else {
+            // All attempts returned empty results
+            throw new Error("No sent emails retrieved after multiple attempts");
+          }
+        } catch (error) {
+          if (attempt < maxAttempts) {
+            // If error but we have retries left
+            console.error(`Error on attempt ${attempt}:`, error);
+            const backoff = Math.min(1000 * Math.pow(2, attempt), 5000);
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            return fetchWithRetry(attempt + 1, maxAttempts);
+          }
+          throw error;
+        }
+      };
+      
+      // Race between the fetch operation and timeout
+      const data = await Promise.race([fetchWithRetry(), timeoutPromise]);
+      
+      setEmails(data);
+      setLastRefreshTime(`Last updated: ${new Date().toLocaleTimeString()}`);
+      setRetryCount(0);
+      
+      toast({
+        title: "Emails Loaded",
+        description: `Retrieved ${data.length} sent emails.`,
+      });
+    } catch (error) {
+      console.error("Error fetching sent emails:", error);
+      setRetryCount(prev => prev + 1);
+      
+      if (emails.length === 0) {
+        // If we have no emails displayed, try to get them from cache again
+        try {
+          const cachedEmails = JSON.parse(localStorage.getItem('cached_sent_emails') || '[]');
+          if (cachedEmails.length > 0) {
+            console.log(`Using ${cachedEmails.length} cached sent emails due to fetch error`);
+            setEmails(cachedEmails);
+            setLastRefreshTime(`Last cached: ${new Date().toLocaleTimeString()}`);
+            
+            toast({
+              title: "Using Cached Data",
+              description: "Could not connect to email service. Using cached emails instead.",
+              variant: "default",
+            });
+          } else {
+            setFetchError(`Failed to load emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            
+            toast({
+              title: "Error",
+              description: "Failed to load sent emails. Please try again.",
+              variant: "destructive",
+            });
+          }
+        } catch (cacheError) {
+          console.error("Error loading cached sent emails:", cacheError);
+          setFetchError(`Failed to load emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          
+          toast({
+            title: "Error",
+            description: "Failed to load sent emails. Please try again.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Refresh Failed",
+          description: "Failed to refresh emails. Using existing data.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (refreshing) return;
+    fetchSentEmails(true);
+  };
 
   const handleArchive = (id: string) => {
     setEmails(emails.filter(email => email.id !== id));
@@ -118,6 +235,14 @@ export default function Sent() {
     
     setIsSending(true);
     aiWebSocketService.sendMessageWithEmailContext(inputMessage, emailContext);
+    
+    // Add user message to chat
+    setChatMessages(prev => [...prev, { 
+      id: `user_${Date.now()}`, 
+      role: 'user', 
+      content: inputMessage 
+    }]);
+    
     setInputMessage("");
   };
 
@@ -135,16 +260,56 @@ export default function Sent() {
                   Outlook Connected ✅
                 </Badge>
               )}
+              {lastRefreshTime && (
+                <span className="ml-3 text-xs text-gray-500">{lastRefreshTime}</span>
+              )}
             </div>
-            <Button 
-              variant={showAIChat ? "default" : "outline"}
-              onClick={() => setShowAIChat(!showAIChat)}
-              className="flex items-center gap-2"
-            >
-              <Brain className="h-4 w-4" />
-              {showAIChat ? "Hide AI Chat" : "Show AI Chat"}
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh} 
+                disabled={refreshing}
+                className="flex items-center gap-1"
+              >
+                {refreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Refresh
+              </Button>
+              <Button 
+                variant={showAIChat ? "default" : "outline"}
+                onClick={() => setShowAIChat(!showAIChat)}
+                className="flex items-center gap-2"
+              >
+                <Brain className="h-4 w-4" />
+                {showAIChat ? "Hide AI Chat" : "Show AI Chat"}
+              </Button>
+            </div>
           </div>
+          
+          {fetchError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>Error retrieving emails</AlertTitle>
+              <AlertDescription>
+                {fetchError}
+                <div className="mt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      setRetryCount(0);
+                      fetchSentEmails();
+                    }}
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
           
           {showAIChat && (
             <div className="mb-6 p-4 border rounded-md bg-card">
@@ -212,6 +377,11 @@ export default function Sent() {
               <div className="text-center">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-2" />
                 <p>Loading sent emails...</p>
+                {retryCount > 0 && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Attempt {retryCount + 1} - Trying to reconnect...
+                  </p>
+                )}
               </div>
             </div>
           ) : emails.length > 0 ? (
@@ -293,6 +463,13 @@ export default function Sent() {
               <p className="text-sm text-gray-500 text-center max-w-md">
                 Your sent folder is empty. Messages you send will appear here.
               </p>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => fetchSentEmails()}
+              >
+                Try Refreshing
+              </Button>
             </div>
           )}
         </div>
