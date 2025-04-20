@@ -55,6 +55,11 @@ const EmailApp = () => {
           title: "Outlook Connected ✅",
           description: `Your emails are syncing with Outlook (${userEmail}).`,
         });
+        
+        // Ensure we have a reasonable email count set
+        if (!localStorage.getItem('outlook_email_count')) {
+          localStorage.setItem('outlook_email_count', '200');
+        }
       } else {
         // Show connection dialog if not connected or if force connect is true
         setShowConnectDialog(true);
@@ -76,19 +81,31 @@ const EmailApp = () => {
     };
   }, [forceOutlookConnect]);
 
-  // Fetch emails on component mount
+  // Fetch emails on component mount with improved error handling
   useEffect(() => {
     if (isOutlookConnected) {
       console.log("Outlook connected, fetching emails");
       fetchEmails();
+      
+      // Check for cached emails first while waiting for fetch
+      try {
+        const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+        if (cachedEmails.length > 0) {
+          console.log(`Using ${cachedEmails.length} cached emails while fetching fresh data`);
+          setEmails(cachedEmails);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading cached emails:", error);
+      }
     }
     
-    // Set an interval to refresh emails every 60 seconds
+    // Set an interval to refresh emails every 2 minutes (increased from 60s)
     const refreshInterval = setInterval(() => {
       if (isOutlookConnected) {
         fetchEmails(true); // Silent refresh
       }
-    }, 60000);
+    }, 120000);
     
     // Clear interval on component unmount
     return () => clearInterval(refreshInterval);
@@ -96,7 +113,9 @@ const EmailApp = () => {
 
   const fetchEmails = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setEmailLoadingError(null);
       
       if (!silent) {
@@ -107,7 +126,7 @@ const EmailApp = () => {
         });
       }
       
-      // Set a timeout to prevent hanging
+      // Set a timeout to prevent hanging UI
       const timeoutId = setTimeout(() => {
         setEmailLoadingProgress("Taking longer than expected... please wait");
       }, 5000);
@@ -116,29 +135,73 @@ const EmailApp = () => {
       const data = await emailService.getEmails();
       clearTimeout(timeoutId);
       
-      setEmails(data);
-      setEmailLoadingProgress(null);
-      
-      // Dispatch a custom event to notify other components about the email update
-      window.dispatchEvent(new CustomEvent('emailsUpdated'));
-      
-      if (!silent) {
-        toast({
-          title: "Emails Synced",
-          description: `Retrieved ${data.length} emails.`,
-        });
+      // Only update emails if we got a non-empty result
+      if (data && data.length > 0) {
+        setEmails(data);
+        setEmailLoadingProgress(null);
+        
+        // Dispatch a custom event to notify other components about the email update
+        window.dispatchEvent(new CustomEvent('emailsUpdated'));
+        
+        if (!silent) {
+          toast({
+            title: "Emails Synced",
+            description: `Retrieved ${data.length} emails.`,
+          });
+        }
+      } else if (data && data.length === 0) {
+        // If we got an empty result but have cached emails, use those
+        try {
+          const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+          if (cachedEmails.length > 0) {
+            console.log(`Using ${cachedEmails.length} cached emails because fresh fetch returned empty`);
+            setEmails(cachedEmails);
+            
+            if (!silent) {
+              toast({
+                title: "Using Cached Emails",
+                description: `Using ${cachedEmails.length} previously cached emails.`,
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error loading cached emails:", error);
+        }
       }
     } catch (error) {
       console.error("Error fetching emails:", error);
       setEmailLoadingError(`Failed to load emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
-      toast({
-        title: "Error ❌",
-        description: "Failed to load emails. Please try again.",
-        variant: "destructive",
-      });
+      // Try to use cached emails
+      try {
+        const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+        if (cachedEmails.length > 0) {
+          console.log(`Using ${cachedEmails.length} cached emails due to fetch error`);
+          setEmails(cachedEmails);
+          
+          toast({
+            title: "Using Cached Emails",
+            description: `Using ${cachedEmails.length} previously cached emails due to connection issues.`,
+          });
+        } else {
+          toast({
+            title: "Error ❌",
+            description: "Failed to load emails. Please try again.",
+            variant: "destructive",
+          });
+        }
+      } catch (cacheError) {
+        console.error("Error loading cached emails:", cacheError);
+        
+        toast({
+          title: "Error ❌",
+          description: "Failed to load emails. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -316,13 +379,25 @@ const EmailApp = () => {
           description: `Successfully connected to Outlook (${outlookEmail}).`,
         });
         
-        // Set the number of emails to load
-        localStorage.setItem('outlook_email_count', '600'); // Set to match the user's expectation
+        // Set a more reasonable number of emails to load
+        localStorage.setItem('outlook_email_count', '200');
         
         setIsOutlookConnected(true);
         setShowConnectDialog(false);
         
-        // Refresh email list
+        // First check for cached emails to display immediately
+        try {
+          const cachedEmails = JSON.parse(localStorage.getItem('cached_outlook_emails') || '[]');
+          if (cachedEmails.length > 0) {
+            setEmails(cachedEmails);
+            setLoading(false);
+            console.log(`Loaded ${cachedEmails.length} cached emails for immediate display`);
+          }
+        } catch (error) {
+          console.error("Error loading cached emails:", error);
+        }
+        
+        // Then refresh email list
         handleRefresh();
         
         // Let the AI know about Outlook connection

@@ -23,6 +23,9 @@ export const outlookService = {
       // Store the connection time to help with debugging
       localStorage.setItem('outlook_connected_time', new Date().toISOString());
       
+      // Set a more reasonable default email count
+      localStorage.setItem('outlook_email_count', '200');
+      
       // Ensure the connected state is set correctly
       outlookService.isConnected = true;
       console.log('Successfully connected to Outlook');
@@ -299,17 +302,18 @@ export const outlookService = {
   },
   
   // Get emails in batches to prevent memory issues and timeouts
-  getEmailsBatch: async (offset: number = 0, limit: number = 100): Promise<EmailPreview[]> => {
+  getEmailsBatch: async (offset: number = 0, limit: number = 50): Promise<EmailPreview[]> => {
     if (!outlookService.checkConnection()) {
       console.error('Not connected to Outlook');
       throw new Error('Not connected to Outlook');
     }
     
     // In a real implementation, this would call Microsoft Graph API with pagination
-    await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
+    // Reduced simulated delay to prevent timeouts
+    await new Promise(resolve => setTimeout(resolve, 500)); 
     
-    // Get actual email count from localStorage or default to a random large number
-    const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '600');
+    // Get actual email count from localStorage or default to a reasonable number
+    const emailCount = parseInt(localStorage.getItem('outlook_email_count') || '200');
     console.log(`Retrieving batch ${offset}-${offset+limit} of ${emailCount} emails from Outlook`);
     
     // Generate dynamic emails for this batch
@@ -435,9 +439,9 @@ export const outlookService = {
       dynamicEmails.push(...outlookEmails);
     }
     
-    // Calculate how many emails to generate for this batch
+    // Calculate how many emails to generate for this batch, but limit to reasonable amount
     const startIndex = offset === 0 ? dynamicEmails.length : offset;
-    const endIndex = Math.min(offset + limit, emailCount);
+    const endIndex = Math.min(offset + limit, Math.min(emailCount, 200));
     const batchSize = endIndex - startIndex;
     
     // Generate additional emails for this batch
@@ -530,8 +534,8 @@ export const outlookService = {
       // Combine existing cache with new emails
       const updatedCache = [...existingCache, ...newEmails];
       
-      // Only keep most recent emails if cache gets too large
-      const maxCacheSize = 1000;
+      // Only keep most recent emails if cache gets too large - use a smaller size for better performance
+      const maxCacheSize = 500;
       const trimmedCache = updatedCache.length > maxCacheSize 
         ? updatedCache.slice(updatedCache.length - maxCacheSize) 
         : updatedCache;
@@ -545,8 +549,8 @@ export const outlookService = {
     
     console.log(`Returning ${dynamicEmails.length} Outlook emails for batch ${offset}-${offset+limit}`);
     
-    // Store the count for future reference
-    localStorage.setItem('outlook_email_count', emailCount.toString());
+    // Store the count for future reference - but don't overestimate
+    localStorage.setItem('outlook_email_count', Math.min(emailCount, dynamicEmails.length * 4).toString());
     
     // Notify the UI to update
     window.dispatchEvent(new CustomEvent('emailsUpdated'));
